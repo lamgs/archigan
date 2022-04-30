@@ -6,7 +6,7 @@
 
 ## Introuction
 
-* This is a very simple-to-use and simple-to-understand pytorch implementation of part of the [paper](https://arxiv.org/abs/1610.07584) "Learning a Probabilistic Latent Space of Object Shapes via 3D Generative-Adversarial Modeling". I provide the complete pipeline of loading dataset, training, evaluation and visualization here and also I would share some results based on different parameter settings.
+* This PyTorch implementation of ArchiGAN, a research project conducted for generative form-finding based on 3D data. Code is based off of part of the [paper](https://arxiv.org/abs/1610.07584) "Learning a Probabilistic Latent Space of Object Shapes via 3D Generative-Adversarial Modeling". I provide the complete pipeline of loading dataset, training, evaluation and visualization here and also I would share some results based on different parameter settings.
 
 ### Prerequisites
 
@@ -17,10 +17,10 @@
 
 ### Pipeline
 
-Basically I already put the `chair` dataset and a trained model as an example in `volumetric_data` and `outputs` folders. You can directly go to the training or evaluation part. But I still give a complete pipeline here.
+* 3D models were converted into obj files, that were then processed using `binvox-rw.py`.
 
 #### Data
-* First, click [here](http://3dshapenets.cs.princeton.edu/3DShapeNetsCode.zip) to download the dataset. Then unzip it and put the `volumetric_data` folder to the path of our main repository. As we use ModelNet instead of ShapeNet here, the results may be inconsistent with the paper.
+* Data was proprietary, and needs to be placed in a folder called `volumetric_data`.
 
 #### Training
 * Then `cd src`, simply run `python main.py` on GPU or CPU. Of course, you need a GPU for training until getting good results. I used one GeForce GTX 1070 in my experiments on 3D models with resolution of 32x32x32. The maximum number of channels of feature map is 256. Because of these, the results may be inconsistent with the paper. You may need a stronger one for higher resolution one 64x64x64 and 512 feature maps. 
@@ -54,23 +54,8 @@ go to  [Soumith’s ganhacks repo.](https://github.com/soumith/ganhacks)
 * Sigmoid function is used at both generator and discriminator for final outputs.
 
 
-
-### Results
-
-* I trained all models in the following for 500 epochs and save the last model weights. Some random samples are shown at the last epoch.
-
-* Model 0: basic parameter setting
-<img width="700" height="300" src="./results/norm/499.png"></img>
-
-* Model 1: change normal(0, 0.33) to uniform(0, 1) for sampling latent z vector based on Model 0
-<img width="700" height="300" src="./results/uniform/499.png"></img>
-
-* Model 2: change sigmoid at generator to tanh based on Model 0
-<img width="700" height="300" src="./results/tanh/499.png"></img>
-
-* Others: I tried soft labels / leakyReLU on both discriminator and generator based on Model 0, they both diverge (or collapse maybe) after somwhere before 500 epochs. For models without the discriminator, we will have a generator with trivial results. Also, I didn't really observe the convergence for all models, after 500 epochs, the loss of discriminator (real + fake) begins to be lower than 1.
-
 ### Acknowledgements
 
-* This code is a heavily modified version based on both [3DGAN-Pytorch](https://github.com/rimchang/3DGAN-Pytorch) and [tf-3dgan](https://github.com/meetshah1995/tf-3dgan) and thanks for them. Here I try to build a simpler but more complete pipeline, and explore more results with different settings as well.
+* This code is a heavily modified version based on both [3DGAN-Pytorch](https://github.com/rimchang/3DGAN-Pytorch) and [tf-3dgan](https://github.com/meetshah1995/tf-3dgan) and thanks for them.
+
 
