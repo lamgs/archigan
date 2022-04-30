@@ -1,5 +1,4 @@
-# Simple 3D-GAN-PyTorch
-
+# "ArchiGAN - Artificial Architectures": PyTorch Implementation.
 <!-- [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/meetshah1995/tf-3dgan/blob/master/LICENSE)
 [![arXiv Tag](https://img.shields.io/badge/arXiv-1610.07584-brightgreen.svg)](https://arxiv.org/abs/1610.07584)
  -->
