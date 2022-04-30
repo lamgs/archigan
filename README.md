@@ -3,7 +3,7 @@
 [![arXiv Tag](https://img.shields.io/badge/arXiv-1610.07584-brightgreen.svg)](https://arxiv.org/abs/1610.07584)
  -->
 
-## Introuction
+## Introduction
 
 * This PyTorch implementation of ArchiGAN, a research project conducted for generative form-finding based on 3D data. Code is based off of part of the [paper](https://arxiv.org/abs/1610.07584) "Learning a Probabilistic Latent Space of Object Shapes via 3D Generative-Adversarial Modeling". I provide the complete pipeline of loading dataset, training, evaluation and visualization here and also I would share some results based on different parameter settings.
 
