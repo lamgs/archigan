@@ -31,7 +31,7 @@ Status legend: `[x]` complete, `[ ]` incomplete. P0 is required for the master-b
 
 ## Gate review
 
-- [x] **P0 acceptance-gate review** completed 2026-10-09 — PASS with exceptions E1–E4 (see `STATUS.md`). The MVP is **not** declared complete until the owner accepts those exceptions.
+- [x] **P0 acceptance-gate review** completed 2026-10-09 — PASS with exceptions E1–E4 (see `STATUS.md`). The MVP is **not** declared complete: by owner decision (2026-10-09) exceptions E1–E4 remain outstanding.
 
 ## P1 — Post-MVP capabilities
 

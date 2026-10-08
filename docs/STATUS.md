@@ -3,7 +3,7 @@
 **Updated:** 2026-10-09  
 **Branch:** `claude/determined-sagan-v8sy6v` (work after merged PR #1; see git for clean/dirty state)  
 **Milestone:** All P0 tasks implemented; **P0 gate review completed — PASS with documented exceptions** (below)  
-**Overall:** Complete local-first MVP candidate. Declaring the MVP complete needs the owner to accept exceptions E1–E4.
+**Overall:** Complete local-first MVP candidate. **By owner decision (2026-10-09), exceptions E1–E4 remain OUTSTANDING and the MVP is NOT declared complete.** Do not mark it complete, and do not start P1 work, until the owner says otherwise.
 
 ## P0 gate review (2026-10-09, commit `a76ad35`)
 
@@ -95,6 +95,13 @@ Record anything that stops or limits work here (with the date and what would unb
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
 - Manual browser smoke test: passed for generation, refinement, save, WebGL rendering, camera reset, and GLB serialization/download trigger.
 
-## Next action
+## Next action (handoff to the next session)
 
-Owner decision: accept or reject exceptions E1–E4. If accepted, the MVP can be declared complete and post-MVP work (P1.01 Supabase sync, P1.02 Tripo, P1.03 GLB import) may begin. If not, the cheapest way to close each: E1 run the six-step smoke test in `DEPLOYMENT.md` with a low-credit key; E2 manual pass on a real GPU/phone and Safari/Firefox, recording results in the blockers table; E3 an authorized Vercel session (or `E2E_BASE_URL` + bypass secret) running the smoke subset; E4 restyle the toolbar vertically / build the optional interpreter.
+**Owner decision recorded:** keep E1–E4 outstanding. Nothing is left to build for P0; remaining work is closing exceptions, each of which needs something this environment lacked. Pick up in this order, recording results in the blockers table and a new HANDOFF entry:
+
+1. **E1 — live Meshy:** needs a throwaway low-credit `MESHY_API_KEY` in a trusted environment (never commit it). Run the six-step smoke test in `DEPLOYMENT.md`. Compare the real JSON against `normalizeTask` in `src/lib/providers/meshy.ts` (`model_urls.glb`, `task_error.message`, `expires_at` are unconfirmed) and adjust the adapter/tests. Only then consider changing the hard-wired `verified:false` in `meshyStatus()`.
+2. **E3 — deployed app:** with an authorized Vercel identity run `vercel inspect <dpl> --logs`, or smoke-test with `E2E_BASE_URL=https://<host> VERCEL_AUTOMATION_BYPASS_SECRET=<secret> npx playwright test e2e/acceptance.spec.ts -g "1\.|8\."`. Also clear the project-level Output Directory override (`public`) in Vercel settings (`vercel.json` currently masks it).
+3. **E2 — real devices/browsers:** manual pass on a real GPU, an iPhone/Android, Safari and Firefox (viewer, render PNGs at 1920×1080, touch orbit/pan, autosave, backup/import). Record findings; fix what breaks.
+4. **E4 — deviations:** restyle the “Add” toolbar as a compact vertical left toolbar; optionally build the server-side LLM interpreter (see ADR-014) — only if the owner wants them.
+
+Do not start P1 (Supabase sync, Tripo, GLB import) while any of the above is undecided. Everything else is green: from a fresh clone, `npm ci && npm run lint && npm run test && npm run test:e2e` pass (194 unit/component + 25 Playwright tests).

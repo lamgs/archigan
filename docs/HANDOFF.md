@@ -2,6 +2,15 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — handoff: exceptions kept outstanding
+
+- Owner instruction: keep exceptions E1–E4 outstanding; hand off to another session. No code changed in this entry; the MVP is deliberately **not** declared complete and P1 has **not** started.
+- State: branch `claude/determined-sagan-v8sy6v` is pushed and in sync with its remote; PR #1 (P0.09–P0.14) was merged earlier, everything after P0.14 is on this branch only and **not yet merged to `main`** (no PR is open — open one when the owner asks). Last code commit `a76ad35`; Vercel status `success`.
+- Fresh-clone verification at `a76ad35`: lint, tsc, 194 unit/component tests, build, audit clean, 25/25 Playwright (twice). Evidence screenshots in `docs/evidence/` are refreshed only with `E2E_EVIDENCE=1 npm run test:e2e`.
+- Start the next session by reading `docs/STATUS.md` (gate review table, blockers table, “Next action”), then `docs/TASKS.md` and this log. Commands: `npm ci`, `npm run lint`, `npm run test`, `npm run test:e2e` (builds first; uses `/opt/pw-browsers/chromium` automatically in this container).
+- Things the next session should know that are easy to miss: (1) hosted generation is fail-closed and needs `MESHY_ENABLED`, `MESHY_API_KEY` **and** `MESHY_ACCESS_CODE`; (2) data lives only in each visitor's browser (IndexedDB), so there is no server-side data to migrate or back up; (3) `vercel.json` pins `framework: nextjs` and `outputDirectory: .next` because the Vercel project still has an Output Directory override of `public`; (4) artifacts are immutable and append-only — never overwrite or delete them (ids are collision-checked); (5) the local interpreter only understands the vocabulary listed in `INTERPRETER_HELP`; (6) sample wording must use only words it honours; (7) async work must not apply results to a different open project (`openProjectId` guard, regression-tested); (8) the e2e suite mocks the hosted API — it never calls Meshy.
+- Next: see STATUS “Next action” (E1 → E3 → E2 → E4), only on the owner's go-ahead.
+
 ## 2026-10-09 — Claude — P0 gate review
 
 - Verified from a fresh clone (`a76ad35`): `npm ci`, lint, tsc, 194 unit/component tests, production build, audit clean, 25/25 Playwright tests twice; Vercel status `success`; tree clean after tests. Traced every requirement in `PRODUCT_REQUIREMENTS.md` and the Phase 6 gate in `IMPLEMENTATION_PLAN.md` against code/tests/evidence.
