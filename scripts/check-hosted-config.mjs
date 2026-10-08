@@ -10,7 +10,9 @@ const PROVIDERS = [
 ];
 
 /** Pure: evaluates an env object. Returns per-provider status plus global warnings. */
-export function evaluate(env) {
+export function evaluate(rawEnv) {
+  // A value still set to the REPLACE_ME placeholder counts as missing.
+  const env = Object.fromEntries(Object.entries(rawEnv).map(([k, v]) => [k, typeof v === "string" && v.startsWith("REPLACE_ME") ? "" : v]));
   const code = env.SIFT_ACCESS_CODE || env.MESHY_ACCESS_CODE || "";
   const warnings = [];
   if (!code) warnings.push("No access code: set SIFT_ACCESS_CODE. Without it NO hosted provider can be enabled (fail closed).");

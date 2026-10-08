@@ -28,4 +28,9 @@ describe("hosted config preflight", () => {
   it("never includes secret values in its output", () => {
     expect(JSON.stringify(evaluate({ FAL_KEY: "SECRET-VALUE-123", SIFT_ACCESS_CODE: "ACCESS-VALUE-4567890" }))).not.toMatch(/SECRET-VALUE|ACCESS-VALUE/);
   });
+  it("treats REPLACE_ME placeholders as missing", () => {
+    const r = evaluate({ TRIPO_ENABLED: "true", TRIPO_API_KEY: "REPLACE_ME", SIFT_ACCESS_CODE: CODE });
+    expect(r.providers.find((p: { label: string }) => p.label === "Tripo").configured).toBe(false);
+    expect(JSON.stringify(r)).toMatch(/Enabled but missing TRIPO_API_KEY/);
+  });
 });
