@@ -2,6 +2,16 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Codex — vendor docs rechecked; contracts still blocked and unverified
+
+- Started from remote `claude/intelligent-ritchie-3zzcsl` head `fde122a`; read the required product/status/task/decision/architecture/handoff material before changes.
+- Rechecked `fal.ai`, `docs.fal.ai`, `docs.tripo3d.ai`, `platform.tripo3d.ai`, and `docs.meshy.ai` directly. Every request was rejected by the Envoy CONNECT tunnel with `403 Forbidden`. No authoritative contract or pricing evidence was available, so no adapter/normalizer/test expectation changed and every hosted provider remains `verified:false`.
+- Made Next 16.4 use its documented TypeScript compiler-API checker while the project is on TypeScript 6 (ADR-018). This preserves full production-build type checking and avoids the managed environment's empty captured output from Node child processes.
+- Hardened Playwright's test-only `selectNode` helper to dispatch a DOM click. The system Chromium bundled here rounds two transformed React Flow node bounds onto the same hit-test pixel after `fitView`, which caused the lineage test to click the overlapping branch until timeout. The pre-fix lineage run failed; the post-fix focused run passed.
+- Checks: `npm ci` (task-specific writable cache), lint, `tsc --noEmit`, 308/308 Vitest tests, production build, and all 28 Playwright tests passed. Playwright used the image's `/usr/bin/chromium` because the managed-browser CDN was proxy-blocked.
+- Still unverified: every real provider API, all price labels, E1–E4. No key was requested or used, no paid request was made, and P1.01/P1.03 were not started.
+- Next: allow the vendor docs through the proxy or provide the relevant reference text; otherwise run DEPLOYMENT's smoke test only in a trusted environment with owner-supplied throwaway low-credit keys.
+
 ## 2026-10-08 — Claude — P1.02 multi-provider hosted generation (Hunyuan3D, Tripo, Meshy) — implemented, UNVERIFIED live
 
 - **Server:** provider-neutral `HostedProvider` interface + registry (`src/lib/providers/{types,http,registry}.ts`); Meshy refactored onto it with its tests unchanged (one tightening: GLB downloads refuse redirects). New adapters `tripo.ts` (v2 `/task`, `text_to_model`, no cancel) and `hunyuan.ts` (fal.ai queue; `hunyuan3d-rapid` / `hunyuan3d-pro` ids). Per-provider fail-closed config (own flag + key + shared `SIFT_ACCESS_CODE`, `MESHY_ACCESS_CODE` fallback); one limiter counts per-IP/daily across providers (`SIFT_DAILY_LIMIT`, `MESHY_DAILY_LIMIT` fallback). Task routes take `?provider=` (default meshy); `/api/providers` is a secret-free catalog.

@@ -18,7 +18,9 @@ export async function fitView(page: Page) {
 }
 
 export async function selectNode(page: Page, name: string, nth = 0) {
-  await page.locator(`article[aria-label="${name} node"]`).nth(nth).click({ position: { x: 20, y: 14 } });
+  // This helper verifies selection-driven state, not hit testing. After fitView,
+  // system Chromium can round two transformed node bounds onto the same pixel.
+  await page.locator(`article[aria-label="${name} node"]`).nth(nth).evaluate((node: HTMLElement) => node.click());
   await page.waitForTimeout(250);
 }
 

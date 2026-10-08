@@ -1,6 +1,6 @@
 # Current status
 
-**Updated:** 2026-10-09 (P1.02 added)  
+**Updated:** 2026-10-08 (vendor-doc reachability rechecked; build verification hardened)
 **Branch:** `claude/intelligent-ritchie-3zzcsl` (based on `claude/determined-sagan-v8sy6v`) (work after merged PR #1; see git for clean/dirty state)  
 **Milestone:** All P0 tasks implemented; **P0 gate review completed — PASS with documented exceptions** (below)  
 **Overall:** Complete local-first MVP candidate. **By owner decision (2026-10-09), exceptions E1–E4 remain OUTSTANDING and the MVP is NOT declared complete.** Do not mark it complete, and do not start P1 work, until the owner says otherwise.
@@ -44,8 +44,8 @@ Record anything that stops or limits work here (with the date and what would unb
 
 | Date | Blocker | Effect | What would unblock it |
 | --- | --- | --- | --- |
-| 2026-10-09 | `docs.meshy.ai` is blocked by the agent network proxy (WebFetch `EGRESS_BLOCKED`); only search snippets were readable. | The Meshy adapter follows the publicly documented contract as summarized by search (statuses, endpoints, DELETE 409 on running tasks); exact response field names (`model_urls`, `task_error`, `expires_at`) are unconfirmed, so parsing is lenient and everything is labelled **unverified**. | Allow `docs.meshy.ai` through the proxy, or paste the Text-to-3D reference; or run one real task and compare the JSON. |
-| 2026-10-08 | `fal.ai`, `docs.fal.ai`, `platform.tripo3d.ai` are blocked by the egress proxy; only search snippets were readable. | Hunyuan3D (fal queue endpoints `fal-ai/hunyuan-3d/v3.1/{rapid,pro}/text-to-3d`, app-id status/result/cancel URLs, `model_glb`, `enable_pbr`/`enable_geometry`/`face_count`, prompt limits, 403 balance wording, cancel 400) and Tripo (v2 `/task` vs v3 per-capability endpoints, body fields, `output.*` names, envelope codes 2010/2000, asset hosts, no cancel) adapters are **UNVERIFIED**, implemented leniently. Prices: Hunyuan ≈ $0.225/$0.375 from fal pages; Tripo cost unconfirmed. | Allow `fal.ai`/`tripo3d.ai` docs through the proxy, or run one real task per provider and compare the JSON (DEPLOYMENT smoke test). |
+| 2026-10-08 | `docs.meshy.ai` was rechecked directly with `curl`; the Envoy CONNECT tunnel returned `403 Forbidden`. | The Meshy adapter still follows search-snippet summaries (statuses, endpoints, DELETE 409 on running tasks); exact response field names (`model_urls`, `task_error`, `expires_at`) remain unconfirmed, so parsing is lenient and everything is labelled **unverified**. | Allow `docs.meshy.ai` through the proxy, paste the Text-to-3D reference, or run one real task and compare the JSON. |
+| 2026-10-08 | `fal.ai`, `docs.fal.ai`, `docs.tripo3d.ai`, and `platform.tripo3d.ai` were rechecked directly with `curl`; every Envoy CONNECT tunnel returned `403 Forbidden`. | Hunyuan3D (fal queue endpoints `fal-ai/hunyuan-3d/v3.1/{rapid,pro}/text-to-3d`, app-id status/result/cancel URLs, `model_glb`, `enable_pbr`/`enable_geometry`/`face_count`, prompt limits, 403 balance wording, cancel 400) and Tripo (v2 `/task` vs v3 per-capability endpoints, body fields, `output.*` names, envelope codes 2010/2000, asset hosts, no cancel) adapters remain **UNVERIFIED** and lenient. Prices remain estimates; Tripo cost is unconfirmed. | Allow the fal.ai/Tripo documentation hosts through the proxy, paste the relevant references, or run one real task per provider and compare the JSON (DEPLOYMENT smoke test). |
 | 2026-10-09 | No hosted-provider API key/account (Meshy, Tripo, fal.ai) in this environment. | No live hosted call has ever been made for any provider. Only mocked documented-contract tests exist; `verified` is hard-wired `false`. | A paid key per provider (`MESHY_API_KEY`/`TRIPO_API_KEY`/`FAL_KEY` + its `*_ENABLED=true` + `SIFT_ACCESS_CODE`) in a trusted environment, then the manual smoke test in `DEPLOYMENT.md`. |
 | 2026-10-09 | All WebGL checks ran in headless Chromium on SwiftShader (software rendering) in this container. | Real-GPU frame rates, memory pressure, mobile GPUs, Safari/Firefox, and the `deviceMemory` heuristic for 1920×1080 are untested. | Manual pass on real desktop + mobile devices/browsers; record results here. |
 | 2026-10-09 | `vercel.com` / `api.vercel.com` are unreachable and no Vercel token is available. | Build logs and the deployed app (behind Deployment Protection) cannot be inspected by the agent; deploy health is inferred from GitHub commit statuses only. | An authorized Vercel identity (`vercel inspect <id> --logs`), or the user pasting logs/errors. |
@@ -76,13 +76,9 @@ Record anything that stops or limits work here (with the date and what would unb
 ## Known limitations
 
 - Meshy has not been called with a real account; status must remain “unverified.” Hosted results are fixed meshes (not editable); variation/render nodes need the Local provider’s parametric spec. The access code is held in memory only, so after a reload it must be re-entered to resume polling. Rate limits are per server instance (in-memory).
-- Render nodes have no behavior until P0.16; `/api/generate` still returns legacy `MassingSpec` and is unused by the UI; variation nodes derive their spec live (snapshotted for lineage only) (not yet persisted as child artifacts — P0.14).
-- Storage logic is covered via pure functions (`reconcileStores`); IndexedDB itself is not exercised by automated tests (no fake-indexeddb yet).
-- Variation output is derived live from prompt+refinement (not persisted as an artifact, not directly parameter-editable until P0.13/P0.14). Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is now unused.
-- Direct parameter controls, contextual inspector, non-destructive design branches, and restored lineage are not implemented.
+- Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is unused.
 - The viewer’s own “PNG” button still captures the live canvas at its on-screen size (render nodes are the resolution-specific path); live viewer settings are not persisted; renders are produced on the main thread and block briefly at large sizes.
 - Orphaned render assets (superseded renders) are kept until the project is deleted; deleted projects are not recoverable; a blank new project is not persisted until its first Generate (schema requires a prompt).
-- Meshy create code exists, but the client job lifecycle, polling/streaming, persistent GLB ingestion, paid-request protection, and provider-mocked tests remain open.
 - Procedural output remains conceptual massing, not BIM, code-compliant, structural, or fabrication geometry.
 - E2E runs only in Chromium on software rendering (SwiftShader); no Firefox/WebKit/mobile or real-GPU coverage; no CI workflow is committed (it would need workflow-scope push permission).
 - The Vercel deployment is access-protected and has not been smoke-tested behind protection from this session.
@@ -95,6 +91,7 @@ Record anything that stops or limits work here (with the date and what would unb
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
 - Manual browser smoke test: passed for generation, refinement, save, WebGL rendering, camera reset, and GLB serialization/download trigger.
+- 2026-10-08 continuation verification at `fde122a` plus the build/test-harness compatibility changes: `npm ci` (with a writable `/tmp` cache), lint, `tsc --noEmit`, 308 Vitest tests, production build, and all 28 Playwright tests passed. The first system-Chromium Playwright run passed 27/28 and exposed a transformed-node hit-test timeout; after making the test-only node selector dispatch an explicit DOM click, the focused mutation check and final full suite passed.
 
 ## Next action (handoff to the next session)
 
