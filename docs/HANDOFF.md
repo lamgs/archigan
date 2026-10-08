@@ -2,6 +2,13 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0 gate review
+
+- Verified from a fresh clone (`a76ad35`): `npm ci`, lint, tsc, 194 unit/component tests, production build, audit clean, 25/25 Playwright tests twice; Vercel status `success`; tree clean after tests. Traced every requirement in `PRODUCT_REQUIREMENTS.md` and the Phase 6 gate in `IMPLEMENTATION_PLAN.md` against code/tests/evidence.
+- Gaps found and fixed: descriptor text; principal sample did not match its specified brief (interpreter now parses “12-story”, “four-story podium”, “eight-story tower”, “every two floors”, “glazed”); render tone mapping ≠ viewer (parity test mutation-checked); undo/redo added (ADR-013); GLB validated by Khronos glTF-Validator; heading-order/ARIA-role a11y issues (axe now 0 violations of any impact); security e2e (no provider names/URLs/headers in client bundle, fail-closed endpoints); runbook (release/rollback/provider cost/performance budget); `E2E_BASE_URL` + bypass-secret support for smoke-testing a deployment; evidence screenshots only refresh with `E2E_EVIDENCE=1`; untracked `__pycache__` (ADR-015).
+- Result: **PASS with exceptions E1–E4** recorded in `STATUS.md`. MVP intentionally NOT declared complete pending owner acceptance.
+- Next: owner decision on E1–E4; then P1 work or exception closure (see STATUS “Next action”).
+
 ## 2026-10-09 — Claude — P0.21 portfolio completion (all P0 tasks implemented)
 
 - Samples: `buildTerracedTowerStudy()` (built with the real domain functions; two branches, lineage, Render node with `autoRender`), plus Twin Towers and Cylindrical Residence; Courtyard Commons removed (ADR-011). `copyFromSample` now clones the whole board. First-run steps + “Explore the Terraced Tower Study”, canvas hint, `INTERPRETER_HELP` surfaced in inspector.

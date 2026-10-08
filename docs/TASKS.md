@@ -29,6 +29,10 @@ Status legend: `[x]` complete, `[ ]` incomplete. P0 is required for the master-b
 - [x] **P0.20 Acceptance automation.** Add component and Playwright coverage for generate, inspect, edit, branch, render, GLB, persistence, missing credentials, provider lifecycle, and production regression. Acceptance: all ten scenarios in `PRODUCT_REQUIREMENTS.md` pass and key screenshots are retained. *Done: `e2e/acceptance.spec.ts` (10 tests, one per scenario, run against the production build; stable over 4 consecutive runs) + `e2e/helpers.ts`; jsdom component tests in `src/components/studio/components.test.tsx`; evidence in `docs/evidence/`. Scenario 9 uses a mocked hosted API (live Meshy remains unverified); WebGL scenarios ran on software rendering. axe found and we fixed two real contrast defects.*
 - [x] **P0.21 Portfolio completion.** Ship Terraced Tower Study with two saved variations/render plus two distinct typology presets; finish first-run copy, responsive/accessibility review, and README architecture/setup/credentials/tests/deploy/limitations/independence sections. *Done: `buildTerracedTowerStudy` (two retained branches with lineage + self-rendering Render node), Twin Towers and Cylindrical Residence presets; first-run steps, featured-sample entry, canvas hint, interpreter vocabulary help; responsive rework (found and fixed hidden navigation on phones, overlapping inspector, stale layout CSS) with 4-width e2e + axe; README and ARCHITECTURE rewritten. See ADR-011/012.*
 
+## Gate review
+
+- [x] **P0 acceptance-gate review** completed 2026-10-09 — PASS with exceptions E1–E4 (see `STATUS.md`). The MVP is **not** declared complete until the owner accepts those exceptions.
+
 ## P1 — Post-MVP capabilities
 
 - [ ] **P1.01 Supabase sync.** Add optional authenticated project/database and asset-storage sync without weakening local-first behavior.

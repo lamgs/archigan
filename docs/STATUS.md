@@ -2,8 +2,33 @@
 
 **Updated:** 2026-10-09  
 **Branch:** `claude/determined-sagan-v8sy6v` (work after merged PR #1; see git for clean/dirty state)  
-**Milestone:** All P0 tasks (P0.01–P0.21) implemented; P0 acceptance-gate review pending  
-**Overall:** Complete local-first MVP candidate. Not declared MVP-complete until the gate review below confirms the honest-reporting items (live Meshy, real-GPU/cross-browser testing) are accepted as documented exceptions.
+**Milestone:** All P0 tasks implemented; **P0 gate review completed — PASS with documented exceptions** (below)  
+**Overall:** Complete local-first MVP candidate. Declaring the MVP complete needs the owner to accept exceptions E1–E4.
+
+## P0 gate review (2026-10-09, commit `a76ad35`)
+
+Verified from a **fresh clone of the remote branch**: `npm ci` → lint clean → `tsc` clean → 194 unit/component tests → production build → `npm audit` 0 vulnerabilities → 25 Playwright tests passed on two consecutive runs; Vercel commit status `success`; working tree clean afterwards.
+
+| Gate criterion (`IMPLEMENTATION_PLAN.md` Phase 6 / `PRODUCT_REQUIREMENTS.md`) | Result | Evidence |
+| --- | --- | --- |
+| All 21 P0 tasks checked | Pass | `TASKS.md` |
+| Acceptance scenarios 1–8 | Pass | `e2e/acceptance.spec.ts` + `docs/evidence/` |
+| Scenario 9 (hosted jobs) | Pass **as mocked contract**; live reported separately | E1 |
+| Scenario 10 (TS, lint, tests, Playwright, build, a11y, screenshots) | Pass | axe: 0 violations of any impact (incl. best-practice) on dashboard/studio/inspector/render/focus at 1280 and 390 px |
+| Principal sample matches the brief (12 stories, 4-floor podium + 8-floor tower, setbacks every 2 floors, glazed) | Pass (fixed in this review) | `samples.test.ts` |
+| Viewer ≈ render, GLB valid | Pass (fixed/added in this review) | tone-mapping parity test; Khronos glTF-Validator: 0 errors |
+| No secrets in client bundle / history; hosted endpoints fail closed | Pass | `e2e/security.spec.ts`, history scan |
+| Undo/redo or equivalent safe recovery | Pass (added in this review) | `e2e/undo.spec.ts`, ADR-013 |
+| Deploy/rollback/provider-cost runbook, performance budget | Pass (added) | `DEPLOYMENT.md` |
+
+**Defects found and fixed by the review:** product descriptor read “Architectural intelligence” (now “AI Architectural Form Studio”); the principal sample did not match its specified brief because the interpreter ignored numbers; renders used different tone mapping than the viewer; no undo/redo for graph edits; heading-order and ARIA-role accessibility issues; evidence screenshots churned on every test run (now opt-in via `E2E_EVIDENCE=1`); generated `__pycache__` files were tracked (ADR-015).
+
+**Exceptions the owner must accept before declaring the MVP complete** (each also appears in the blockers table below):
+
+- **E1 — Live Meshy is unverified.** No real-account call has ever been made; `verified` is hard-wired `false`. The PRD only requires mock/live to be labelled and reported separately, which they are.
+- **E2 — Real-GPU, Safari/Firefox and mobile-device testing was not done.** Everything ran in headless Chromium on software rendering. Touch interaction was not tested on a touch device (only responsive layouts).
+- **E3 — The deployed app behind Vercel Deployment Protection was not inspected;** deployment health is the GitHub commit status only.
+- **E4 — Minor deviations from the brief:** the “Add” toolbar is a horizontal pill at the top-left of the board rather than a vertical left toolbar; the optional server-side LLM interpreter was not built (ADR-014).
 
 ## Deployment
 
@@ -64,7 +89,7 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Verification
 
-- `npm run test`: passed, 17 files / 190 unit+component tests; 18 Playwright e2e tests (10 acceptance scenarios, 4 portfolio, 4 responsive).
+- `npm run test`: passed, 17 files / 194 unit+component tests; 25 Playwright e2e tests (11 acceptance incl. render/viewer parity, 4 portfolio, 4 responsive, 4 undo, 2 security).
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -72,4 +97,4 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Next action
 
-Run the **P0 acceptance-gate review** (nothing new to build): (1) re-run `npm run lint && npm run test && npm run test:e2e` on the final commit; (2) check every P0 box and the ten scenarios in `PRODUCT_REQUIREMENTS.md` against `docs/evidence/`; (3) confirm each item in “Blockers and unverified items” is either resolved or knowingly accepted as an exception (live Meshy smoke test, real-GPU/Safari/Firefox/mobile pass, Vercel runtime check behind protection); (4) then decide whether to declare the MVP complete. Do not start P1 work (Supabase sync, Tripo, GLB import) before that decision.
+Owner decision: accept or reject exceptions E1–E4. If accepted, the MVP can be declared complete and post-MVP work (P1.01 Supabase sync, P1.02 Tripo, P1.03 GLB import) may begin. If not, the cheapest way to close each: E1 run the six-step smoke test in `DEPLOYMENT.md` with a low-credit key; E2 manual pass on a real GPU/phone and Safari/Firefox, recording results in the blockers table; E3 an authorized Vercel session (or `E2E_BASE_URL` + bypass secret) running the smoke subset; E4 restyle the toolbar vertically / build the optional interpreter.
