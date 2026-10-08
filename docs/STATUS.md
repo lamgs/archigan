@@ -5,6 +5,13 @@
 **Milestone:** Phase 1 baseline complete; master-brief MVP gap closure active  
 **Overall:** Working local vertical slice, not yet MVP-complete
 
+## Deployment
+
+- Vercel project: `booth-os/archigan`.
+- Recorded URL: `https://archigan-ctjx7uh6t-booth-os.vercel.app`.
+- Observed 2026-10-08: hostname responds with a `302` redirect to Vercel SSO/Deployment Protection.
+- Deployment metadata and authenticated application smoke test remain unverified because this session lacks `booth-os` connector/CLI authorization. See `DEPLOYMENT.md`.
+
 ## Working now
 
 - Shared Codex/Claude operating docs and explicit product boundary.
@@ -26,6 +33,7 @@
 - Meshy create code exists, but the client job lifecycle, polling/streaming, persistent GLB ingestion, paid-request protection, and provider-mocked tests remain open.
 - Procedural output remains conceptual massing, not BIM, code-compliant, structural, or fabrication geometry.
 - Automated browser end-to-end coverage is not yet committed; the current flow has been manually smoke-tested in the in-app browser.
+- The Vercel deployment is access-protected and has not been smoke-tested behind protection from this session.
 - The legacy Python prototype remains at the root until a later cleanup decision.
 
 ## Verification

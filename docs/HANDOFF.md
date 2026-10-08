@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Codex — Vercel deployment recorded
+
+- Recorded the user-created `booth-os/archigan` Vercel project, deployment URL, and dashboard link in `DEPLOYMENT.md` and README.
+- Verified the deployment hostname reaches Vercel but redirects unauthenticated requests to Vercel SSO/Deployment Protection.
+- Vercel connector inspection returned `403` for the `booth-os` scope; the fallback CLI is not installed. Target environment, source commit, logs, and protected application behavior therefore remain unverified.
+- Tests: not rerun because only Markdown documentation changed.
+- Next deployment action: use an authorized Vercel identity and the checklist in `DEPLOYMENT.md`; do not disable protection solely for automation.
+
 ## 2026-10-08 — Codex — Master brief reconciliation
 
 - Added `PRODUCT_REQUIREMENTS.md` as the durable, implementation-oriented source for the full user-supplied master brief.

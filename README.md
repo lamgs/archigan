@@ -12,6 +12,10 @@ npm run dev
 
 Open <http://localhost:3000>. The procedural provider works without environment variables.
 
+## Deployment
+
+The repository is connected to the Vercel project `booth-os/archigan`. The recorded deployment is <https://archigan-ctjx7uh6t-booth-os.vercel.app>. It currently redirects unauthenticated requests to Vercel SSO/Deployment Protection, so it is recorded as deployed but not publicly smoke-tested. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the protected-access verification checklist.
+
 ```bash
 npm run test
 npm run lint
