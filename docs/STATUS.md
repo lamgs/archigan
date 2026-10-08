@@ -9,6 +9,7 @@
 
 - Vercel project: `booth-os/archigan`.
 - Recorded URL: `https://archigan-ctjx7uh6t-booth-os.vercel.app`.
+- 2026-10-09: all deployments from `f43fc44` through P0.12 failed on Vercel; adding `vercel.json` (framework `nextjs`) made commit `6fa7198` deploy successfully per the GitHub `Vercel` status. Logs/runtime remain unverified.
 - Observed 2026-10-08: hostname responds with a `302` redirect to Vercel SSO/Deployment Protection.
 - Deployment metadata and authenticated application smoke test remain unverified because this session lacks `booth-os` connector/CLI authorization. See `DEPLOYMENT.md`.
 
