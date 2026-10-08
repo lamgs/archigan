@@ -22,6 +22,12 @@ The Codex Vercel connector identified the `booth-os` team but returned `403 forb
 
 Do not disable Deployment Protection merely to make automated verification pass. Use an authorized Vercel connection or `vercel curl` with the existing team identity.
 
+## Build failure investigation (2026-10-09)
+
+GitHub commit statuses (context `Vercel`) show every deployment since `f43fc44` (the first commit with `package.json`) as `failure`; the earlier README-only commit `7fd7a25` succeeded as a static deploy. `npm ci`, `npm run build`, tests, and lint pass locally on Node 22, and the failure predates the P0.09+ changes. Vercel build logs were not reachable from the agent environment (vercel.com/api.vercel.com blocked, no token), so the root cause is **inferred, not confirmed**: most likely the project's Framework Preset/Output Directory still reflect the earlier static project.
+
+Mitigation: `vercel.json` pins `framework: nextjs`, `npm ci`, `npm run build`, and clears the output-directory override. If the next deployment still fails, run `npx vercel inspect <dpl_id> --logs` (id is in the failing commit status `target_url`) and append the error here. Also check Project Settings → General: Framework Preset = Next.js, Root Directory empty, Node.js version 20.x–24.x.
+
 ## Runtime configuration
 
 The procedural application requires no secrets. Optional hosted generation requires server-side variables:
