@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.15 expanded 3D viewer (+ PR #1 merged, Vercel verified)
+
+- Merged PR #1 (P0.09–P0.14 + Vercel fix) to `main`; Vercel status for the merge commit `47e43aa` was `success`. Branch restarted from `main` for new work.
+- Added `viewer.ts` (pure presets/framing/metrics), view modes in `three-building.ts`, rewritten `model-preview.tsx` with a manually managed camera/controls rig (OrbitControls caches `up`, so the camera + controls are rebuilt per preset; frustum/aspect synced on resize).
+- Checks: test 85/85, lint clean, build passes. Playwright screenshots confirm top/front/right/axonometric/perspective, all four modes, helpers, focus mode (dialog, Esc, focus returns to trigger), keyboard orbit/zoom/frame, and outer-canvas isolation. Console shows only the pre-existing `/favicon.ico` 404.
+- Open risks: shadows are heavy in top view; viewer state is local (not persisted, not shared with the render node yet); GLB export ignores display mode by design; focus mode is a simple overlay without a full focus trap.
+- Next: P0.16 render artifacts — reuse `viewer.ts` presets/modes so a render node can reproduce a view at 1024×1024 / 1600×900 offscreen.
+
 ## 2026-10-09 — Claude — P0.14 non-destructive branching
 
 - Added `branchFrom`, `commitVariations`, `upstreamArtifactId`, `lineageOf`, `versionsOf`, `restoreVersion` to `workflow.ts`; Branch button on nodes, lane labels, versions fieldset in the inspector; `persist` now snapshots changed variations before saving (also triggered by textarea blur and inspector edits).

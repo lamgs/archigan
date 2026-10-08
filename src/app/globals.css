@@ -225,3 +225,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .versions small { color: var(--muted); }
 .versions button { justify-self: start; margin-top: 3px; border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: 2px 9px; font-size: 10px; cursor: pointer; }
 .versions button:hover { background: var(--ink); color: white; }
+
+.preview-panel { grid-template-rows: 82px auto 1fr auto auto auto auto; }
+.preview-panel__header { gap: 10px; }
+.viewer-focus { border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: 6px 12px; font-size: 11px; cursor: pointer; }
+.viewer-focus:hover, .viewer-focus[aria-pressed="true"] { background: var(--ink); color: white; }
+.viewer-bar { display: flex; flex-wrap: wrap; gap: 6px 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.viewer-bar__group { display: flex; flex-wrap: wrap; gap: 3px; }
+.viewer-bar button { border: 1px solid var(--line); border-radius: 2px; background: transparent; padding: 4px 8px; font-size: 10px; cursor: pointer; }
+.viewer-bar button:hover { border-color: var(--ink); }
+.viewer-bar button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: white; }
+.preview-panel__canvas:focus-visible { outline: 2px solid var(--accent-bright); outline-offset: -2px; }
+.viewer-hint { position: absolute; top: 8px; left: 12px; margin: 0; padding: 3px 6px; background: rgba(247,244,237,.72); color: #4d4943; font-size: 9px; pointer-events: none; }
+.preview-panel--focus { position: fixed; z-index: 60; inset: 68px 0 0 0; grid-template-rows: 82px auto 1fr auto auto auto auto; border: 0; background: var(--paper-deep); }
+.preview-panel__actions { grid-template-columns: repeat(4, auto); justify-content: start; }
