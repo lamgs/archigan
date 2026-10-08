@@ -38,7 +38,7 @@ export function StudioNode({ id, data, selected }: NodeProps<StudioFlowNode>) {
         <span>{EYEBROW[data.type]}</span>
         <em className={`status status--${data.status}`} title={data.message}>{STATUS_LABEL[data.status]}</em>
       </div>
-      <h3>{NODE_LABELS[data.type]}{typeof data.params.label === "string" && data.params.label ? <small className="node-label"> · {data.params.label}</small> : null}</h3>
+      <h2>{NODE_LABELS[data.type]}{typeof data.params.label === "string" && data.params.label ? <small className="node-label"> · {data.params.label}</small> : null}</h2>
       {editable ? (
         <textarea
           className="nodrag nowheel"

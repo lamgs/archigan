@@ -64,6 +64,8 @@ export async function renderPng(spec: BuildingSpec, settings: RenderSettings): P
   const layout = computeLayout(spec);
   const group = buildBuildingGroup(spec, layout, settings.mode);
   try {
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; // match the live viewer (react-three-fiber defaults to ACES Filmic)
+    renderer.toneMappingExposure = 1;
     renderer.setPixelRatio(1);
     renderer.setSize(width, height, false);
     if (canvas.width !== width || canvas.height !== height) throw new RenderError(`This device could not allocate a ${width}×${height} image.`);

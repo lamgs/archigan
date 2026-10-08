@@ -92,7 +92,29 @@ function Studio() {
   const blank = graph.nodes.filter((node) => node.type === "prompt").every((node) => !String(node.params.text ?? "").trim());
 
   const uid = useCallback((prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}-${(counter.current += 1)}`, []);
-  const setParam = useCallback((id: string, value: string) => setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, params: { ...node.data.params, text: value } } } : node))), [setNodes]);
+  // ---- Undo / redo of board edits (artifacts are append-only, so history only moves graph state and pointers) ----
+  const graphRef = useRef(graph);
+  useEffect(() => { graphRef.current = graph; });
+  const history = useRef<{ past: FlowGraph[]; future: FlowGraph[] }>({ past: [], future: [] });
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+  const syncHistory = useCallback(() => setHistoryState({ canUndo: history.current.past.length > 0, canRedo: history.current.future.length > 0 }), []);
+  const lastTextEdit = useRef(0);
+  /** Call BEFORE a user edit changes the board; it remembers what to go back to. */
+  const record = useCallback(() => {
+    const h = history.current;
+    h.past.push(structuredClone(graphRef.current));
+    if (h.past.length > 60) h.past.shift();
+    h.future = [];
+    syncHistory();
+  }, [syncHistory]);
+  const resetHistory = () => { history.current = { past: [], future: [] }; syncHistory(); };
+
+  const setParam = useCallback((id: string, value: string) => {
+    const now = Date.now();
+    if (now - lastTextEdit.current > 1500) record(); // one history step per typing burst, not per keystroke
+    lastTextEdit.current = now;
+    setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, params: { ...node.data.params, text: value } } } : node)));
+  }, [setNodes, record]);
 
   const buildProject = (base: Meta, g: FlowGraph, viewport: Viewport = base.viewport): SiftProjectV2 => ({ schemaVersion: 2, ...base, viewport, updatedAt: new Date().toISOString(), graph: g });
 
@@ -167,6 +189,7 @@ function Studio() {
       }
       const next = { ...meta, artifacts: recorded.state.artifacts };
       setMeta(next);
+      record();
       setNodes((current) => current.map((item) => {
         if (item.id !== id) return item;
         const { autoRender: _auto, ...params } = item.data.params;
@@ -198,6 +221,7 @@ function Studio() {
   const setRenderSetting = (key: keyof RenderSettings, value: string) => {
     if (!selectedId) return;
     setRenderError(null);
+    record();
     setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, params: { ...node.data.params, [key]: value } } } : node)));
   };
 
@@ -324,6 +348,7 @@ function Studio() {
     if (meta.settings.provider === "meshy" && graph.nodes.find((node) => node.id === id)?.type === "generation") return startHosted(id);
     const result = runGeneration({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, id, meta.settings.provider, { artifact: uid("artifact"), job: uid("job"), revision: uid("rev") }, new Date().toISOString());
     if (!result.ok) return setNotice(result.message);
+    record();
     const next = { ...meta, artifacts: result.state.artifacts, jobs: result.state.jobs, revisions: result.state.revisions };
     const nextGraph = { nodes: result.state.nodes, edges: result.state.edges };
     setMeta(next);
@@ -387,6 +412,7 @@ function Studio() {
     const result = editNodeGeometry({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, selectedId, edit, { artifact: uid("artifact"), revision: uid("rev") }, new Date().toISOString());
     if (!result.ok) return setEditError(result.message);
     setEditError(null);
+    record();
     const next = { ...meta, artifacts: result.state.artifacts, revisions: result.state.revisions };
     const nextGraph = { nodes: result.state.nodes, edges: result.state.edges };
     setMeta(next);
@@ -399,6 +425,7 @@ function Studio() {
 
   const clearEdits = () => {
     if (!selectedId) return;
+    record();
     setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, params: { ...node.data.params, edits: [] } } } : node)));
   };
 
@@ -407,15 +434,51 @@ function Studio() {
       const known = new Map(current.map((node) => [node.id, node]));
       return toFlowNodes(next).map((node) => {
         const existing = known.get(node.id);
-        return existing ? { ...existing, data: { ...existing.data, params: node.data.params, artifactId: node.data.artifactId } } : node;
+        return existing ? { ...existing, position: node.position, data: { ...existing.data, params: node.data.params, artifactId: node.data.artifactId } } : node;
       });
     });
     setEdges(toFlowEdges(next));
   };
 
+  const undo = () => {
+    const h = history.current;
+    const previous = h.past.pop();
+    if (!previous) return;
+    h.future.push(structuredClone(graphRef.current));
+    applyGraph(previous);
+    syncHistory();
+    setNotice("Undone.");
+  };
+  const redo = () => {
+    const h = history.current;
+    const next = h.future.pop();
+    if (!next) return;
+    h.past.push(structuredClone(graphRef.current));
+    applyGraph(next);
+    syncHistory();
+    setNotice("Redone.");
+  };
+  const undoRef = useRef(undo);
+  const redoRef = useRef(redo);
+  useEffect(() => { undoRef.current = undo; redoRef.current = redo; });
+  useEffect(() => {
+    if (view !== "studio") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return; // keep native field undo
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) { event.preventDefault(); undoRef.current(); }
+      else if ((key === "z" && event.shiftKey) || key === "y") { event.preventDefault(); redoRef.current(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view]);
+
   const branch = (sourceId: string) => {
     const result = branchFrom(graph, sourceId, { variation: uid("variation"), model: uid("model"), edgeA: uid("edge"), edgeB: uid("edge") });
     if (!result.ok) return setNotice(result.message);
+    record();
     applyGraph(result.graph);
     setNodes((current) => current.map((node) => ({ ...node, selected: node.id === result.variationId })));
     setNotice("Branched: a new variation lane starts from the same source. Edit it in the inspector or add a follow-up prompt.");
@@ -425,6 +488,7 @@ function Studio() {
     if (!selectedId) return;
     const result = restoreVersion({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, selectedId, artifactId);
     if (!result.ok) return setNotice(result.message);
+    record();
     setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, artifactId } } : node)));
     setNotice("Switched to the earlier version; later versions are kept.");
     void persist(meta, { nodes: result.state.nodes, edges: result.state.edges });
@@ -433,6 +497,7 @@ function Studio() {
   const add = (sourceId: string, type: DesignNodeType) => {
     const result = addConnectedNode(graph, sourceId, type, { node: uid(type), edge: uid("edge") });
     if (!result.ok) return setNotice(result.message);
+    record();
     applyGraph(result.graph);
     setNotice(`${NODE_LABELS[type]} node added and connected.`);
   };
@@ -441,6 +506,7 @@ function Studio() {
     const box = wrap.current?.getBoundingClientRect();
     const position = box ? flow.screenToFlowPosition({ x: box.left + box.width / 2 + (counter.current % 4) * 24, y: box.top + box.height / 2 + (counter.current % 4) * 24 }) : { x: 100, y: 100 };
     counter.current += 1;
+    record();
     applyGraph(addNode(graph, type, uid(type), position));
     setNotice(`${NODE_LABELS[type]} node added. Drag from its ports to connect it.`);
   };
@@ -448,6 +514,7 @@ function Studio() {
   const onConnect = (connection: Connection) => {
     const result = connectNodes(graph, connection, uid("edge"));
     if (!result.ok) return setNotice(result.message);
+    record();
     setEdges(toFlowEdges(result.graph));
   };
   const isValid = (connection: Connection | Edge) => validateConnection(graph.nodes, graph.edges, { source: connection.source, sourcePort: connection.sourceHandle ?? "", target: connection.target, targetPort: connection.targetHandle ?? "" }).ok;
@@ -473,6 +540,7 @@ function Studio() {
     setMeta(metaOf(copy));
     setNodes(toFlowNodes(copy.graph));
     setEdges(toFlowEdges(copy.graph));
+    resetHistory();
     setNotice(isBlankProject(copy) ? "Describe a building to begin." : `${copy.name} loaded.`);
     setSavedSig(projectSignature({ ...copy, graph: copy.graph }));
     setView("studio");
@@ -543,7 +611,7 @@ function Studio() {
   return (
     <main className="studio-shell">
       <header className="topbar">
-        <a className="brand" href="#workspace" aria-label="Sift home — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}><span>S</span><strong>Sift</strong><small>Architectural intelligence</small></a>
+        <a className="brand" href="#workspace" aria-label="Sift home — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}><span>S</span><strong>Sift</strong><small>AI Architectural Form Studio</small></a>
         <div className="project-title">{view === "studio" && <><span>Project /</span><input aria-label="Project name" value={meta.name} onChange={(event) => setMeta((current) => ({ ...current, name: event.target.value }))} /></>}</div>
         <div className="topbar__actions"><span className="save-badge" data-state={saveLabel.state} role="status" aria-live="polite">{saveLabel.text}</span><span className="save-state" role="status">{notice}</span>{view === "studio" && <button type="button" className="ghost-button" onClick={() => void persist()}>Save project</button>}{view === "studio" && <button type="button" className="ghost-button" onClick={() => void goToDashboard()}>All projects</button>}</div>
       </header>
@@ -571,11 +639,13 @@ function Studio() {
           <section className={`canvas-panel ${inspectorCollapsed || !selectedNode ? "canvas-panel--inspector-collapsed" : "canvas-panel--inspector-open"}`} aria-label="Generation workflow">
             <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><span className="provider-chip" title="Change the provider in the Generation node inspector">{provider === "procedural" ? "Local procedural" : "Meshy (unverified)"}</span></header>
             <div className="add-toolbar" role="toolbar" aria-label="Add node">
+              <button type="button" className="toolbar-icon" aria-label="Undo" title="Undo (Ctrl/⌘+Z)" disabled={!historyState.canUndo} onClick={undo}>↶</button>
+              <button type="button" className="toolbar-icon" aria-label="Redo" title="Redo (Ctrl/⌘+Shift+Z)" disabled={!historyState.canRedo} onClick={redo}>↷</button>
               <span>Add</span>
               {NODE_ORDER.map((type) => <button type="button" key={type} onClick={() => addFree(type)}>{NODE_LABELS[type]}</button>)}
             </div>
             <div className="flow-wrap" ref={wrap}>
-              <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} attributionPosition="bottom-left">
+              <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onBeforeDelete={async (deletion) => { record(); return deletion; }} onNodeDragStart={() => record()} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} attributionPosition="bottom-left">
                 <Background variant={BackgroundVariant.Dots} gap={22} size={1.1} color="#b9b2a5" />
                 <Controls showInteractive={false} />
                 <MiniMap pannable zoomable nodeColor="#8f2f24" maskColor="rgba(236,232,223,.72)" />

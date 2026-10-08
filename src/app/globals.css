@@ -68,7 +68,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .studio-node__topline { display: flex; justify-content: space-between; align-items: center; color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .studio-node--massing .studio-node__topline { color: #dc897b; }
 .studio-node__topline i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid currentColor; }
-.studio-node h3 { margin: 18px 0 8px; font: 500 19px/1.1 Georgia, serif; }
+.studio-node h2 { margin: 18px 0 8px; font: 500 19px/1.1 Georgia, serif; }
 .studio-node p { min-height: 37px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
 .studio-node--massing p { color: #c9c2b6; }
 .studio-node footer { margin-top: 15px; padding-top: 9px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9px; }
@@ -300,3 +300,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
   .project-grid { grid-template-columns: 1fr; }
   .studio-node { width: 220px; }
 }
+
+.add-toolbar .toolbar-icon { width: 28px; height: 28px; padding: 0; font-size: 15px; border: 1px solid var(--line); background: transparent; }
+.add-toolbar .toolbar-icon:disabled { opacity: .4; cursor: default; }
+.add-toolbar .toolbar-icon:disabled:hover { background: transparent; color: inherit; }

@@ -26,8 +26,41 @@ const has = (text: string, terms: string[]) => terms.some((term) => text.include
 
 export const normalizeBriefText = normalizeBrief;
 
+const NUMBER_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40 };
+const toCount = (token: string) => (/^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]);
+const COUNT = "(\\d+|[a-z]+)";
+const STOREYS = "(?:stor(?:y|ies|ey|eys)|floors?|levels?)";
+
+/** Floor counts and setback rhythm the local interpreter can read from a brief ("12-story", "four-story podium", "eight-story tower", "setbacks every two floors"). */
+export type ParsedCounts = { total?: number; podium?: number; tower?: number; setbackEvery?: number };
+
+export function parseCounts(brief: string): ParsedCounts {
+  const out: ParsedCounts = {};
+  const roleSpans: [number, number][] = [];
+  for (const match of brief.matchAll(new RegExp(`${COUNT}[- ]${STOREYS}(?:[ -][a-z]+){0,3}?[ -](podium|base|tower)\\b`, "g"))) {
+    const n = toCount(match[1]);
+    if (!n) continue;
+    out[match[2] === "tower" ? "tower" : "podium"] ??= n;
+    roleSpans.push([match.index ?? 0, (match.index ?? 0) + match[0].length]);
+  }
+  for (const match of brief.matchAll(new RegExp(`${COUNT}[- ]${STOREYS}\\b`, "g"))) {
+    const start = match.index ?? 0;
+    const n = toCount(match[1]);
+    const afterEvery = brief.slice(Math.max(0, start - 6), start) === "every ";
+    if (n && !afterEvery && !roleSpans.some(([a, b]) => start >= a && start < b) && !out.total) out.total = n;
+  }
+  // "a 20-story terraced tower" describes the whole building; "an eight-story tower above a podium" describes the tower part.
+  if (out.tower !== undefined && out.podium === undefined && out.total === undefined && !/\b(above|atop|on top|over|rising from)\b/.test(brief)) {
+    out.total = out.tower;
+    delete out.tower;
+  }
+  const every = new RegExp(`every ${COUNT} ${STOREYS}\\b`).exec(brief);
+  if (every && toCount(every[1])) out.setbackEvery = toCount(every[1]);
+  return out;
+}
+
 /** What the local (offline) interpreter understands. Everything else in a brief is ignored, and the UI says so. */
-export const INTERPRETER_HELP = "The local engine reads these keywords: shape — twin, cylindrical/round, twist/spiral, pavilion/low-rise (otherwise a terraced tower); material — glass, brick/terracotta, concrete (otherwise limestone); form — tower/skyscraper (taller), terrace/stepped/setback/garden (stepped roof), gallery/museum/atrium (taller floors). Other words are ignored.";
+export const INTERPRETER_HELP = "The local engine reads these keywords: shape — twin, cylindrical/round, twist/spiral, pavilion/low-rise (otherwise a terraced tower); material — glass/glazed, brick/terracotta, concrete (otherwise limestone); form — tower/skyscraper (taller), terrace/stepped/setback/garden (stepped roof), gallery/museum/atrium (taller floors); numbers — “12-story”, “four-story podium”, “eight-story tower”, “setbacks every two floors”. Other words are ignored.";
 
 export function detectTypology(brief: string): Typology {
   if (has(brief, ["twin", "two towers", "pair of towers", "paired"])) return "twin";
@@ -39,7 +72,7 @@ export function detectTypology(brief: string): Typology {
 
 function materialOf(brief: string): MaterialName {
   if (has(brief, ["brick", "terracotta", "clay"])) return "terracotta";
-  if (has(brief, ["glass", "transparent", "crystalline"])) return "glass";
+  if (has(brief, ["glass", "glazed", "glazing", "transparent", "crystalline"])) return "glass";
   if (has(brief, ["concrete", "brutalist", "monolithic"])) return "concrete";
   return "limestone";
 }
@@ -64,6 +97,12 @@ export function deriveBuildingSpec(prompt: string, refinement = ""): BuildingSpe
   const materials = { [material]: MATERIALS[material], accent: ACCENT };
   const name = prompt.trim().slice(0, 60) || "Untitled study";
   const twistDeg = 35 + (seed % 55);
+  const counts = parseCounts(brief);
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, Math.round(value)));
+  const podiumFloors = clamp(counts.podium ?? 4, 1, 12);
+  const towerFloors = clamp(counts.tower ?? (counts.total !== undefined ? counts.total - podiumFloors : p.floors), 1, 100);
+  const setbackEvery = clamp(counts.setbackEvery ?? 4, 1, 60);
+  const totalFloors = clamp(counts.total ?? p.floors + 4, 2, 110);
 
   let spec: Omit<BuildingSpec, "schemaVersion" | "units" | "floorHeight" | "facade" | "materials" | "name">;
   switch (typology) {
@@ -71,9 +110,9 @@ export function deriveBuildingSpec(prompt: string, refinement = ""): BuildingSpe
       spec = {
         footprint: { type: "rectangle", width: 64 + (seed % 10), depth: 34 + (seed % 6) },
         volumes: [
-          vol("podium", "podium", 0, 4, "accent", { footprintScale: 1 }),
-          vol("tower-a", "tower", 4, p.floors, material, { footprintScale: 0.34, offsetX: -17, taper: 0.1 }),
-          vol("tower-b", "tower", 4, Math.max(6, p.floors - 5), material, { footprintScale: 0.34, offsetX: 17, taper: 0.1 }),
+          vol("podium", "podium", 0, podiumFloors, "accent", { footprintScale: 1 }),
+          vol("tower-a", "tower", podiumFloors, counts.tower !== undefined || counts.total !== undefined ? towerFloors : p.floors, material, { footprintScale: 0.34, offsetX: -17, taper: 0.1 }),
+          vol("tower-b", "tower", podiumFloors, Math.max(3, (counts.tower !== undefined || counts.total !== undefined ? towerFloors : p.floors) - 5), material, { footprintScale: 0.34, offsetX: 17, taper: 0.1 }),
         ],
         roof: { style: "crown" },
       };
@@ -83,7 +122,7 @@ export function deriveBuildingSpec(prompt: string, refinement = ""): BuildingSpe
         footprint: { type: "circle", radius: 15 + (seed % 5) },
         volumes: [
           vol("podium", "podium", 0, 3, "accent", { footprintScale: 1.4 }),
-          vol("tower", "tower", 3, p.floors + 4, material, { taper: 0.25, rotationDegrees: 0 }),
+          vol("tower", "tower", 3, counts.total !== undefined ? Math.max(1, totalFloors - 3) : p.floors + 4, material, { taper: 0.25, rotationDegrees: 0 }),
         ],
         roof: { style: "crown" },
       };
@@ -91,7 +130,7 @@ export function deriveBuildingSpec(prompt: string, refinement = ""): BuildingSpe
     case "rotated":
       spec = {
         footprint: { type: "rectangle", width: 24 + (seed % 8), depth: 24 + ((seed >>> 3) % 8) },
-        volumes: [vol("tower", "tower", 0, p.floors + 4, material, { rotationDegrees: twistDeg, taper: 0.12 })],
+        volumes: [vol("tower", "tower", 0, counts.total !== undefined ? totalFloors : p.floors + 4, material, { rotationDegrees: twistDeg, taper: 0.12 })],
         roof: { style: "flat" },
       };
       break;
@@ -106,8 +145,8 @@ export function deriveBuildingSpec(prompt: string, refinement = ""): BuildingSpe
       spec = {
         footprint: { type: "rectangle", width: 56 + (seed % 10), depth: 38 + (seed % 8) },
         volumes: [
-          vol("podium", "podium", 0, 4, "accent"),
-          vol("tower", "tower", 4, p.floors, material, { footprintScale: 0.6, offsetZ: -4, setbackEvery: 4, setbackAmount: 1.2 + (seed % 5) / 5 }),
+          vol("podium", "podium", 0, podiumFloors, "accent"),
+          vol("tower", "tower", podiumFloors, counts.tower !== undefined || counts.total !== undefined ? towerFloors : p.floors, material, { footprintScale: 0.6, offsetZ: -4, setbackEvery, setbackAmount: 1.2 + (seed % 5) / 5 }),
         ],
         roof: { style: roofStyle },
       };

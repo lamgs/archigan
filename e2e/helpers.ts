@@ -1,6 +1,7 @@
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 
-export const EVIDENCE = "docs/evidence";
+/** Evidence screenshots go to a git-ignored folder by default (so test runs leave no churn); `E2E_EVIDENCE=1` refreshes the committed set in docs/evidence. */
+export const EVIDENCE = process.env.E2E_EVIDENCE === "1" ? "docs/evidence" : "test-results/evidence";
 
 /** Opens the app, loads an example brief, runs the Generation node, and fits the board. */
 export async function openStudio(page: Page, example = "Terraced tower") {
@@ -133,4 +134,24 @@ export function watchErrors(page: Page, ignore: RegExp[] = []) {
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => { if (message.type() === "error" && ![/status of 404/, ...ignore].some((pattern) => pattern.test(message.text()))) errors.push(`console: ${message.text()}`); });
   return errors;
+}
+
+/** Mean RGB of the central part of a PNG (default: middle 30%), decoded in the browser. */
+export async function centreColour(page: Page, bytes: Buffer, fraction = 0.3) {
+  return page.evaluate(async ({ base64, fraction }) => {
+    const bitmap = await createImageBitmap(await (await fetch(`data:image/png;base64,${base64}`)).blob());
+    const canvas = document.createElement("canvas"); canvas.width = bitmap.width; canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d")!; ctx.drawImage(bitmap, 0, 0);
+    const w = Math.round(bitmap.width * fraction), h = Math.round(bitmap.height * fraction);
+    const d = ctx.getImageData(Math.round((bitmap.width - w) / 2), Math.round((bitmap.height - h) / 2), w, h).data;
+    let r = 0, g = 0, b = 0; const n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    return [r / n, g / n, b / n];
+  }, { base64: bytes.toString("base64"), fraction });
+}
+
+/** Mean RGB of the middle of the live 3D viewer canvas. */
+export async function viewerCentreColour(page: Page, fraction = 0.3) {
+  const dataUrl = await page.locator(".preview-panel canvas").evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL("image/png"));
+  return centreColour(page, Buffer.from(dataUrl.split(",")[1], "base64"), fraction);
 }

@@ -24,9 +24,9 @@ test("the featured Terraced Tower Study opens as a complete board and renders it
   await selectNode(page, "Model", 1); const b = await caption(page);
   expect(a).not.toBe(b);
   await selectNode(page, "Variation", 0);
-  await expect(page.locator(".versions li").last()).toContainText("glass facade");
+  await expect(page.locator(".versions li").last()).toContainText("brick facade");
   await selectNode(page, "Variation", 1);
-  await expect(page.locator(".versions li").last()).toContainText("setback");
+  await expect(page.locator(".versions li").last()).toContainText(/setback.*taper/);
   await selectNode(page, "Generation");
   await page.screenshot({ path: `${EVIDENCE}/21-terraced-tower-study.png` });
 

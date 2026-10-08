@@ -1,13 +1,14 @@
 import { readFileSync } from "node:fs";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { validateBytes } from "gltf-validator";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Box3, Mesh, Vector3, type Object3D } from "three";
 import { computeLayout } from "../src/lib/geometry";
 import { layoutComplexity } from "../src/lib/limits";
 import { deriveBuildingSpec } from "../src/lib/typologies";
 import { sceneMetrics } from "../src/lib/viewer";
-import { EVIDENCE, caption, canvasFingerprint, fakeHostedApi, fitView, inspectPng, openSavedProject, openStudio, reopenFirstProject, savedBadge, selectNode, storedProjects, viewportTransform, watchErrors } from "./helpers";
+import { EVIDENCE, caption, canvasFingerprint, centreColour, viewerCentreColour, fakeHostedApi, fitView, inspectPng, openSavedProject, openStudio, reopenFirstProject, savedBadge, selectNode, storedProjects, viewportTransform, watchErrors } from "./helpers";
 
 const volumeField = (page: Page, label: string) => page.locator(`.inspector fieldset:has(legend:text("Volume")) label:has(span:text-is("${label}")) input`);
 const levelsOf = (text: string) => Number(/(\d+) levels/i.exec(text)?.[1]);
@@ -207,6 +208,9 @@ test("6. the GLB contains real, matching geometry and reopens successfully", asy
   const bytes = readFileSync((await download.path())!);
   expect(bytes.subarray(0, 4).toString()).toBe("glTF");
   expect(bytes.readUInt32LE(8)).toBe(bytes.length); // header length matches the file
+  const report = await validateBytes(new Uint8Array(bytes)); // Khronos glTF-Validator: an independent check of the file format
+  expect(report.issues.messages.filter((m) => m.severity === 0).map((m) => m.code)).toEqual([]);
+  expect(report.issues.numErrors).toBe(0);
 
   const gltf: { scene: Object3D } = await new Promise((resolve, reject) => new GLTFLoader().parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), "", resolve as never, reject));
   let meshes = 0, triangles = 0;
@@ -401,4 +405,24 @@ test("10. production build is accessible, error-free, and screenshots are retain
   await serious("dashboard (with projects)");
   await page.screenshot({ path: `${EVIDENCE}/10-dashboard.png` });
   expect(errors).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------------------------------------------------
+test("5b. a render looks like the viewer it was made from (same tone mapping, lighting, and framing)", async ({ page }) => {
+  await openStudio(page);
+  await page.locator('[aria-label="Camera preset"] button:has-text("Axonometric")').click();
+  await page.waitForTimeout(600);
+  const viewer = await viewerCentreColour(page);
+  await selectNode(page, "Variation");
+  await page.locator('.node-next button:has-text("Render")').click();
+  await fitView(page);
+  await selectNode(page, "Render");
+  const setting = (label: string) => page.locator(`.inspector label.field:has(span:text-is("${label}")) select`);
+  await setting("Camera").selectOption("axonometric");
+  await setting("Resolution").selectOption("1024x1024");
+  await page.locator('button:has-text("Render PNG")').click();
+  await expect(page.locator(".render-preview")).toBeVisible();
+  const [download] = await Promise.all([page.waitForEvent("download"), page.locator("a:has-text('Download PNG')").click()]);
+  const rendered = await centreColour(page, readFileSync((await download.path())!));
+  rendered.forEach((channel, i) => expect(Math.abs(channel - viewer[i]), `channel ${i}: render ${channel.toFixed(0)} vs viewer ${viewer[i].toFixed(0)}`).toBeLessThan(18));
 });

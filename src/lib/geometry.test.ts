@@ -84,3 +84,28 @@ describe("typologies", () => {
     sampleProjects.forEach((s) => expect(buildingSpecSchema.safeParse(deriveBuildingSpec(s.prompt, s.refinement)).success).toBe(true));
   });
 });
+
+describe("numbers in briefs", () => {
+  const PRD = "Create a 12-story mixed-use building consisting of a four-story rectangular podium and an eight-story tower above. Introduce stepped setbacks every two floors, generous terraces, and a contemporary glazed facade.";
+  it("reads counts and setback rhythm", async () => {
+    const { parseCounts } = await import("./typologies");
+    expect(parseCounts(PRD.toLowerCase())).toEqual({ total: 12, podium: 4, tower: 8, setbackEvery: 2 });
+    expect(parseCounts("a 30 floor tower")).toEqual({ total: 30 });
+    expect(parseCounts("a tower with setbacks every 3 levels")).toEqual({ setbackEvery: 3 });
+    expect(parseCounts("an eight story podium and a twenty-story tower")).toEqual({ podium: 8, tower: 20 });
+    expect(parseCounts("a modern building with a courtyard")).toEqual({});
+  });
+  it("builds the principal-sample building: 4-floor podium + 8-floor tower, setbacks every 2 floors, glazed", () => {
+    const spec = deriveBuildingSpec(PRD);
+    const [podium, tower] = spec.volumes;
+    expect([podium.role, podium.floorCount, tower.role, tower.startFloor, tower.floorCount, tower.setbackEvery]).toEqual(["podium", 4, "tower", 4, 8, 2]);
+    expect(spec.facade.style).toBe("grid");
+    expect(Object.values(spec.materials).some((m) => m.kind === "glass")).toBe(true);
+    expect(computeLayout(spec).floors).toBe(12);
+    expect(spec.roof.style).toBe("terrace");
+  });
+  it("uses a bare total for the tower and clamps absurd values", () => {
+    expect(deriveBuildingSpec("A 20-story terraced tower").volumes[1].floorCount).toBe(16);
+    expect(deriveBuildingSpec("A 500-story terraced tower").volumes.reduce((n, v) => n + v.floorCount, 0)).toBeLessThanOrEqual(110);
+  });
+});

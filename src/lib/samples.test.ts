@@ -3,7 +3,7 @@ import { siftProjectV2Schema } from "./contracts";
 import { computeLayout } from "./geometry";
 import { layoutComplexity } from "./limits";
 import { copyFromSample } from "./projects";
-import { buildTerracedTowerStudy, FEATURED_SAMPLE_ID, SAMPLE_BLURBS, sampleProjects } from "./samples";
+import { buildTerracedTowerStudy, FEATURED_SAMPLE_ID, PRINCIPAL_BRIEF, SAMPLE_BLURBS, sampleProjects } from "./samples";
 import { evaluateGraph } from "./workflow";
 
 const featured = () => sampleProjects.find((s) => s.id === FEATURED_SAMPLE_ID)!;
@@ -39,6 +39,15 @@ describe("bundled samples", () => {
 });
 
 describe("Terraced Tower Study", () => {
+  it("is the exact brief from the requirements: 12 stories, 4-floor podium + 8-floor tower, setbacks every 2 floors, glazed", () => {
+    const source = specOf(featured(), "sample-terraced-tower-generation");
+    expect(PRINCIPAL_BRIEF).toMatch(/12-story/);
+    expect(source.volumes.map((v) => [v.role, v.startFloor, v.floorCount])).toEqual([["podium", 0, 4], ["tower", 4, 8]]);
+    expect(source.volumes[1].setbackEvery).toBe(2);
+    expect(computeLayout(source).floors).toBe(12);
+    expect(featured().graph.nodes.find((n) => n.type === "prompt")?.params.text).toBe(PRINCIPAL_BRIEF);
+  });
+
   it("contains two visible, labelled branches from one generation with recorded lineage", () => {
     const p = featured();
     const variations = p.graph.nodes.filter((n) => n.type === "variation");
@@ -54,10 +63,12 @@ describe("Terraced Tower Study", () => {
     const p = featured();
     const a = specOf(p, "sample-terraced-tower-model");
     const b = specOf(p, "sample-terraced-tower-model-b");
-    expect(a.facade.style).toBe("grid");
-    expect(Object.values(a.materials).some((m) => m.kind === "glass")).toBe(true);
-    expect(b.volumes.find((v) => v.id === "tower")).toMatchObject({ floorCount: 16, setbackEvery: 3, setbackAmount: 2.2 });
-    expect(Object.values(specOf(p, "sample-terraced-tower-generation").materials).some((m) => m.kind === "glass")).toBe(false);
+    expect(Object.values(a.materials).some((m) => m.kind === "clay")).toBe(true); // Branch A: brick
+    expect(a.facade.style).toBe("horizontal");
+    expect(b.volumes.find((v) => v.id === "tower")).toMatchObject({ floorCount: 8, setbackEvery: 2, setbackAmount: 2.2, taper: 0.2 }); // Branch B: deeper setbacks, taper
+    const source = specOf(p, "sample-terraced-tower-generation");
+    expect(source.facade.style).toBe("grid"); // the glazed original is untouched
+    expect(Object.values(source.materials).some((m) => m.kind === "glass")).toBe(true);
   });
   it("includes a Render node that renders itself on open, not a stale image", () => {
     const p = featured();

@@ -257,7 +257,7 @@ export function ModelPreview({ spec: specProp, hosted, provider, stale = false, 
   const resetView = () => { setPreset("perspective"); setFrameToken((value) => value + 1); };
 
   return (
-    <aside className={`preview-panel ${focus ? "preview-panel--focus" : ""}`} aria-label="3D study preview" role={focus ? "dialog" : undefined} aria-modal={focus ? true : undefined}>
+    <section className={`preview-panel ${focus ? "preview-panel--focus" : ""}`} aria-label="3D study preview" role={focus ? "dialog" : "complementary"} aria-modal={focus ? true : undefined}>
       <header className="preview-panel__header">
         <div>
           <span className="section-kicker">Live study</span>
@@ -324,6 +324,6 @@ export function ModelPreview({ spec: specProp, hosted, provider, stale = false, 
       {stale && <p className="preview-panel__note" role="status">Showing the last generated model — the prompt has changed since. Run the Generation node again.</p>}
       {layout.warnings.length > 0 && <p className="preview-panel__note" role="status">{layout.warnings[0]}</p>}
       <p className="preview-panel__note">Concept massing only — not BIM, engineering, or construction geometry.</p>
-    </aside>
+    </section>
   );
 }
