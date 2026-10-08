@@ -2,6 +2,16 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Claude — P1.02 multi-provider hosted generation (Hunyuan3D, Tripo, Meshy) — implemented, UNVERIFIED live
+
+- **Server:** provider-neutral `HostedProvider` interface + registry (`src/lib/providers/{types,http,registry}.ts`); Meshy refactored onto it with its tests unchanged (one tightening: GLB downloads refuse redirects). New adapters `tripo.ts` (v2 `/task`, `text_to_model`, no cancel) and `hunyuan.ts` (fal.ai queue; `hunyuan3d-rapid` / `hunyuan3d-pro` ids). Per-provider fail-closed config (own flag + key + shared `SIFT_ACCESS_CODE`, `MESHY_ACCESS_CODE` fallback); one limiter counts per-IP/daily across providers (`SIFT_DAILY_LIMIT`, `MESHY_DAILY_LIMIT` fallback). Task routes take `?provider=` (default meshy); `/api/providers` is a secret-free catalog.
+- **Contracts:** `providerSchema` extended additively (ADR-017). **Rollback rule:** older builds cannot read projects whose provider is `tripo`/`hunyuan3d-*`.
+- **UI:** provider picker (Local, Hunyuan3D Rapid/Pro, Tripo, Meshy) with configured state, "unverified" label, estimated cost, setup guidance when disabled; paid dialog names the selected provider; polling/ingest/cancel use each job's own provider; Cancel only where the provider supports it, otherwise "Stop waiting".
+- **Docs:** README, `.env.example`, DEPLOYMENT (config, smoke test, cost runbook), ARCHITECTURE, ADR-017, STATUS blockers.
+- **Checks (this branch, see STATUS for final numbers):** lint, tsc, unit/component tests, build, Playwright (scenario 9 runs once per provider; security spec passes). Mutation checks done for the route fail-closed/fallback tests, adapter tests (3 each) and UI tests (8).
+- **NOT verified:** fal.ai, Tripo and Meshy docs were all unreachable (egress proxy); adapters follow search-snippet summaries. No real-account call was made; all providers report `verified:false`. Cost figures are estimates (Tripo unconfirmed). E1–E4 remain outstanding; P1.01/P1.03 not started.
+- **Next:** run the DEPLOYMENT smoke test per provider with throwaway keys; fix field names; resolve the Tripo v2/v3 endpoint question and fal app-id vs full-path URL question first.
+
 ## 2026-10-09 — Claude — owner decision: multi-provider hosted generation (ADR-016)
 
 - Owner chose hosted AI generation with **Hunyuan3D (via fal.ai), Tripo, and Meshy**; Rodin rejected; local procedural remains the free default. Recorded as ADR-016; `TASKS.md` P1.02 rewritten with acceptance criteria; `STATUS.md` “Next action” now permits P1.02 only (E1–E4 still outstanding, P1.01/P1.03 still on hold).

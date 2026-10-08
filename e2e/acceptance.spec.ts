@@ -362,6 +362,12 @@ for (const providerId of Object.keys(FAKE_PROVIDERS) as FakeProviderId[]) test(`
   await dialog.locator('input[type="password"]').fill("letmein");
   await page.locator("button.modal__go").click();
   await expect(hostedHint).toContainText(/Generating/, { timeout: 20_000 });
+  // Switch the selected provider to a different one: the running job must keep using its own provider for every request.
+  const otherId = providerId === "tripo" ? "meshy" : "tripo";
+  await page.locator(`label.radio[data-provider="${otherId}"]`).click();
+  await expect(page.locator(".inspector")).toContainText(`Hosted job · ${FAKE_PROVIDERS[otherId].label}`);
+  await savedBadge(page);
+  expect((await storedProjects(page))[0].settings.provider).toBe(otherId); // the reload below resumes with a different provider selected
   const stored = (await storedProjects(page))[0];
   expect(Object.values<any>(stored.jobs).some((j) => j.provider === providerId && j.providerTaskId === "task-fake-0001" && j.status !== "completed")).toBe(true); // task id persisted before completion
 
@@ -380,11 +386,11 @@ for (const providerId of Object.keys(FAKE_PROVIDERS) as FakeProviderId[]) test(`
   expect(fake.pollProviders.length).toBeGreaterThan(0);
   expect(new Set(fake.pollProviders)).toEqual(new Set([providerId])); // polling always uses the job's own provider
   expect(new Set(fake.modelProviders)).toEqual(new Set([providerId]));
-  expect((Object.values<any>((await storedProjects(page))[0].artifacts).find((a) => a.kind === "model-glb")).metadata.origin).toBe(providerId);
   const [download] = await Promise.all([page.waitForEvent("download"), page.locator('button:has-text("Download GLB")').click()]);
   expect(readFileSync((await download.path())!).subarray(0, 4).toString()).toBe("glTF");
 
   await savedBadge(page); // autosave must settle before a reload, exactly as a user would see it
+  expect((Object.values<any>((await storedProjects(page))[0].artifacts).find((a) => a.kind === "model-glb")).metadata.origin).toBe(providerId);
   await page.reload(); // the model now comes from IndexedDB alone
   await openSavedProject(page);
   await fitView(page); await selectNode(page, "Generation");
