@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-export const providerSchema = z.enum(["procedural", "meshy"]);
+/**
+ * `procedural` and `meshy` are the original values; later values were added backward-compatibly (ADR-017). Older builds
+ * cannot read projects that use a newer value, so rolling back a deployment can make such projects fail to open.
+ */
+export const providerSchema = z.enum(["procedural", "meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro"]);
 export type Provider = z.infer<typeof providerSchema>;
 
 export const massingSpecSchema = z.object({
@@ -135,6 +139,11 @@ export const generationJobSchema = z.object({
   outputUrl: z.string().url().optional(),
   error: z.object({ code: z.string(), message: z.string(), retryable: z.boolean() }).optional(),
   resultArtifactId: id.optional(),
+  /** Execution timestamps; optional so jobs saved before P0.18 still validate. */
+  createdAt: isoDate.optional(),
+  updatedAt: isoDate.optional(),
+  /** When the provider says its signed output URL / retained result expires, if known. */
+  outputExpiresAt: isoDate.optional(),
 });
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 
@@ -170,7 +179,17 @@ export const designRevisionSchema = z.object({
 });
 export type DesignRevision = z.infer<typeof designRevisionSchema>;
 
-export const projectSettingsSchema = z.object({ provider: providerSchema });
+export const viewerSettingsSchema = z.object({
+  preset: z.enum(["perspective", "axonometric", "top", "front", "right"]),
+  mode: z.enum(["shaded", "clay", "glass-concrete", "wireframe"]),
+  grid: z.boolean(),
+  axes: z.boolean(),
+  shadows: z.boolean(),
+});
+export type ViewerSettings = z.infer<typeof viewerSettingsSchema>;
+
+/** `viewer` is optional so projects saved before it existed still validate. */
+export const projectSettingsSchema = z.object({ provider: providerSchema, viewer: viewerSettingsSchema.optional() });
 
 export const siftProjectV2Schema = z
   .object({
@@ -209,5 +228,7 @@ export const generateRequestSchema = z.object({
   prompt: z.string().trim().min(3).max(800),
   refinement: z.string().trim().max(400).default(""),
   provider: providerSchema,
+  /** Must be literally `true` for paid (hosted) providers; the UI sets it only after the user confirms. */
+  confirmSpend: z.boolean().optional(),
 });
 

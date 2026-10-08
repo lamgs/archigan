@@ -1,32 +1,90 @@
 # Sift 2.0
 
-Sift is a focused, xFigura-inspired architectural prompt-to-3D workspace. Describe a building idea, refine it on a node canvas, inspect an immediate procedural massing model, and export a render or GLB. The default path is local-first and does not require an AI account.
+Sift is a focused, xFigura-inspired architectural prompt-to-3D workspace. Describe a building, run it into real parametric 3D massing, branch and edit variations on a node canvas, render PNGs, and export a GLB — locally in your browser, with no account. Optional hosted generation (Meshy) is available behind a server-side key.
+
+> **Scope:** conceptual massing for early design. It is not BIM, structural, code-compliance, or fabrication geometry.
+
+## What you can do
+
+- **Prompt → model.** A Prompt node feeds a Generation node; *Run* creates an immutable building specification and a 3D model (terraced tower, twin towers, cylindrical, rotated, or low-rise typologies).
+- **Edit non-destructively.** The inspector changes footprint, floors, setbacks, taper, twist, facade, roof, and materials. Edits create new revisions; earlier versions stay available.
+- **Branch.** Fork a design into labelled variations (Branch A, Branch B…) that stay visible with their lineage.
+- **View.** Orbit/pan/zoom, camera presets (perspective, axonometric, top, front, right), shaded/clay/glass-concrete/wireframe, focus mode, keyboard controls.
+- **Render and export.** Render nodes produce 1024×1024, 1600×900, or (when the device supports it) 1920×1080 PNGs; the viewer exports a GLB.
+- **Keep everything.** Projects autosave to your browser (IndexedDB) and restore completely, including render images; JSON backup/import is available.
+- **Start from the featured sample.** *Terraced Tower Study* opens as a complete board with two branches and a render.
 
 ## Quick start
 
 ```bash
 npm install
-cp .env.example .env.local
-npm run dev
+npm run dev          # http://localhost:3000
 ```
 
-Open <http://localhost:3000>. The procedural provider works without environment variables.
+The procedural provider needs no environment variables, no account, and no network access. Requires Node 20.9+.
+
+## Architecture
+
+```text
+Browser (Next.js App Router client)
+  React Flow board ──┐         src/lib/workflow.ts     pure domain: evaluate / connect / run / branch / render
+  Inspector ─────────┤────────▶ src/lib/geometry.ts     BuildingSpec → per-floor slabs (no rendering deps)
+  3D viewer (R3F) ───┘          src/lib/typologies.ts    prompt → BuildingSpec (local interpreter)
+        │                       src/lib/contracts.ts     Zod schemas = compatibility boundary (schema v2)
+        ├── src/lib/storage.ts ─▶ IndexedDB (projects + binary assets); the only persistence dependency
+        └── /api/generate/*   ─▶ src/lib/providers/*  server-only provider adapters (Hunyuan3D, Tripo, Meshy) + spend guard
+```
+
+- **Immutable artifacts.** Building specs, renders, and hosted GLBs are artifacts; edits create child artifacts linked by revisions. Jobs (execution state) are kept separate.
+- **Typed graph.** Ports have kinds (`prompt`, `building-spec`, `model-glb`, `render-png`); connections are validated (type, duplicate input, cycles).
+- **Local-first.** All project data lives in the visitor's own browser (per browser profile and site address). There is no cloud sync yet; see *Limitations*.
+- Deeper detail: [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md), decisions in [`docs/DECISIONS.md`](./docs/DECISIONS.md).
+
+## Credentials (optional hosted generation)
+
+Hosted generation is **off by default** and fails closed, per provider. A provider is enabled only if its own flag **and** key are set **and** a shared access code is set (copy `.env.example` to `.env.local`):
+
+| Provider | Flag | Key |
+| --- | --- | --- |
+| Hunyuan3D via fal.ai (Rapid and Pro) | `HUNYUAN_ENABLED=true` | `FAL_KEY` |
+| Tripo | `TRIPO_ENABLED=true` | `TRIPO_API_KEY` |
+| Meshy | `MESHY_ENABLED=true` | `MESHY_API_KEY` |
+
+| Shared variable | Purpose |
+| --- | --- |
+| `SIFT_ACCESS_CODE` | Secret users must type before any paid request (`MESHY_ACCESS_CODE` still works as a fallback). Anyone who has it can spend credits on every enabled provider |
+| `SIFT_DAILY_LIMIT` | Optional per-instance daily cap, counted across all providers (default 20; `MESHY_DAILY_LIMIT` fallback) |
+
+Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All three hosted integrations are unverified:** they were written from vendor documentation summaries (the fal.ai and Tripo docs were unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
+
+## Tests
+
+```bash
+npm run lint
+npm run test        # unit + component tests (Vitest, jsdom)
+npm run build
+npm run test:e2e    # builds, then Playwright against the production build (:3200)
+```
+
+The Playwright suite covers the ten acceptance scenarios in [`docs/PRODUCT_REQUIREMENTS.md`](./docs/PRODUCT_REQUIREMENTS.md), the featured sample, responsive layouts at four widths, and axe WCAG A/AA scans, and writes evidence screenshots to [`docs/evidence/`](./docs/evidence). In containers with a pre-installed Chromium it is used automatically (`/opt/pw-browsers/chromium`, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`); elsewhere run `npx playwright install chromium` first. Hosted-provider tests use a **mock** and never call Meshy.
 
 ## Deployment
 
-The repository is connected to the Vercel project `booth-os/archigan`. The recorded deployment is <https://archigan-ctjx7uh6t-booth-os.vercel.app>. It currently redirects unauthenticated requests to Vercel SSO/Deployment Protection, so it is recorded as deployed but not publicly smoke-tested. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the protected-access verification checklist.
+Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framework and output directory). The Vercel project is `booth-os/archigan`; the deployment is access-protected, so see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the verification checklist and the Meshy variables. Do not commit secrets.
 
-```bash
-npm run test
-npm run lint
-npm run build
-```
+## Limitations
 
-Project coordination lives in [`AGENTS.md`](./AGENTS.md), with current state in [`docs/STATUS.md`](./docs/STATUS.md) and prioritized acceptance criteria in [`docs/TASKS.md`](./docs/TASKS.md).
+- Conceptual massing only; the local interpreter understands a fixed vocabulary of keywords (listed in the app) and ignores other words.
+- Storage is per browser: clearing site data, private browsing, or switching device loses projects unless you downloaded a backup (backups exclude render images and hosted models).
+- Hosted generation is unverified live, produces non-editable meshes, and cannot cancel running hosted tasks (Tripo has no known cancel).
+- Tested in Chromium on software rendering only; other browsers, mobile GPUs, and the 1920×1080 availability heuristic are not independently verified.
+- Courtyard voids and vertical/grid facade fin detail are not modelled.
 
-## Optional Meshy provider
+## Independence and provenance
 
-Meshy integration is server-side and off by default. Copy `.env.example` to `.env.local`, set `MESHY_ENABLED=true`, and add a server-only `MESHY_API_KEY`. Never expose the key with a `NEXT_PUBLIC_` prefix. The current adapter is intentionally reported as **unverified** until a real account smoke test succeeds.
+Sift is an independent project. It is **inspired by** the spatial node-workflow idea of tools like xFigura but is not affiliated with, endorsed by, or built from xFigura or Meshy, and it uses no proprietary data. The repository began as a PyTorch voxel 3D-GAN research prototype ("ArchiGAN"); those Python files are preserved below for provenance only and are not used by, or required for, the product. No models are trained and no training data is collected.
+
+Project coordination for contributors and AI agents lives in [`AGENTS.md`](./AGENTS.md), with current state in [`docs/STATUS.md`](./docs/STATUS.md) and acceptance criteria in [`docs/TASKS.md`](./docs/TASKS.md).
 
 ## Legacy research prototype
 

@@ -10,13 +10,15 @@ import {
   type Provider,
 } from "./contracts";
 import { NODE_PORTS, validateConnection } from "./graph";
+import { parseRenderSettings, renderInputKey } from "./render-settings";
 import { applyEdit, applyEdits, describeEdit, mergeEdit, type SpecEdit } from "./spec-edit";
 import { deriveBuildingSpec, normalizeBriefText } from "./typologies";
 
 export type FlowGraph = { nodes: DesignNode[]; edges: DesignEdge[] };
 export type Brief = { prompt: string; refinement: string };
 export type NodeOutput = { kind: "prompt"; text: string } | { kind: "spec"; spec: BuildingSpec; brief: Brief };
-export type NodeResult = { status: "ready" | "stale"; output: NodeOutput } | { status: "blocked"; message: string };
+/** `pending` is used by Render nodes whose image is missing or no longer matches the model/settings. */
+export type NodeResult = { status: "ready" | "stale" | "pending"; output: NodeOutput; message?: string } | { status: "blocked"; message: string };
 
 export const NODE_LABELS: Record<DesignNodeType, string> = { prompt: "Prompt", generation: "Generation", variation: "Variation", model: "Model", render: "Render" };
 
@@ -75,6 +77,7 @@ export function evaluateGraph(graph: FlowGraph, artifacts: Record<string, Artifa
     if (node.type === "generation") {
       if (input.output.kind !== "prompt") return { status: "blocked", message: "Generation needs a prompt." };
       const artifact = node.artifactId ? artifacts[node.artifactId] : undefined;
+      if (!artifact && node.params.hostedArtifactId) return { status: "blocked", message: "A hosted model exists, but it has no editable geometry. Switch the provider to Local and Run for a parametric design." };
       if (!artifact) return { status: "blocked", message: "Not generated yet — press Run." };
       const parsedSpec = buildingSpecSchema.safeParse(artifact.metadata.spec);
       const brief = artifact.metadata.brief as Brief | undefined;
@@ -94,7 +97,14 @@ export function evaluateGraph(graph: FlowGraph, artifacts: Record<string, Artifa
       const spec = applyEdits(base, variationEdits(node));
       return { status: input.status, output: { kind: "spec", spec, brief } };
     }
-    return { status: input.status, output: input.output }; // model / render consume the spec
+    if (node.type === "render") {
+      const artifact = node.artifactId ? artifacts[node.artifactId] : undefined;
+      const key = renderInputKey(input.output.spec, parseRenderSettings(node.params));
+      if (!artifact) return { status: "pending", output: input.output, message: "Not rendered yet — press Render." };
+      if (artifact.metadata.inputKey !== key) return { status: "pending", output: input.output, message: "The model or settings changed — render again." };
+      return { status: input.status, output: input.output };
+    }
+    return { status: input.status, output: input.output }; // model nodes display the spec
   };
 
   graph.nodes.forEach((node) => evaluate(node.id));
@@ -147,6 +157,7 @@ export function runGeneration(state: RunInput, nodeId: string, provider: Provide
   const node = state.nodes.find((item) => item.id === nodeId);
   if (!node || node.type !== "generation") return { ok: false, message: "Select a generation node to run." };
   if (provider !== "procedural") return { ok: false, message: "Hosted generation is not available yet; switch to Local." };
+  if (ids.artifact in state.artifacts || ids.job in state.jobs || ids.revision in state.revisions) return { ok: false, message: "Generated ids collide with existing records; try again." };
   const input = incoming(state, nodeId);
   const source = input && evaluateGraph(state, state.artifacts)[input.source];
   if (!source) return { ok: false, message: "Connect a prompt to this generation node." };
@@ -186,6 +197,7 @@ export function editNodeGeometry(state: RunInput, nodeId: string, edit: SpecEdit
   const results = evaluateGraph(state, state.artifacts);
   const current = results[nodeId];
   if (!current || current.status === "blocked" || current.output.kind !== "spec") return { ok: false, message: "This node has no model to edit yet." };
+  if (node.type === "generation" && (ids.artifact in state.artifacts || ids.revision in state.revisions)) return { ok: false, message: "Generated ids collide with existing records; try again." };
 
   if (node.type === "variation") {
     const edits = mergeEdit(variationEdits(node), edit);
@@ -245,6 +257,15 @@ export function branchFrom(graph: FlowGraph, sourceId: string, ids: { variation:
 
 const recipeKey = (node: DesignNode, parent: string | undefined) => JSON.stringify({ text: nodeText(node), edits: variationEdits(node), parent });
 
+/** Asks the id generator for ids until one is unused, so an immutable record can never be overwritten by a collision. */
+function uniqueId(newId: (prefix: string) => string, prefix: string, taken: (candidate: string) => boolean) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const candidate = newId(prefix);
+    if (!taken(candidate)) return candidate;
+  }
+  throw new Error(`Could not generate an unused ${prefix} id.`);
+}
+
 /**
  * Snapshots every Variation node whose recipe (follow-up text + parameter edits, over its current parent artifact)
  * changed since its last snapshot: a new immutable artifact plus a revision from the parent artifact.
@@ -262,9 +283,9 @@ export function commitVariations(state: RunInput, newId: (prefix: string) => str
     if (current.artifactId && next.artifacts[current.artifactId]?.metadata.recipeKey === key) return;
     const result = evaluateGraph(next, next.artifacts)[node.id];
     if (!result || result.status === "blocked" || result.output.kind !== "spec" || !parent) return;
-    const artifactId = newId("artifact");
+    const artifactId = uniqueId(newId, "artifact", (candidate) => candidate in next.artifacts);
     const artifact: Artifact = { id: artifactId, kind: "building-spec", sourceNodeId: node.id, createdAt: now, storageKey: `inline:${artifactId}`, metadata: { spec: result.output.spec, brief: result.output.brief, origin: "variation", recipeKey: key, parentArtifactId: parent } };
-    const revisionId = newId("rev");
+    const revisionId = uniqueId(newId, "rev", (candidate) => candidate in next.revisions);
     const revision: DesignRevision = { id: revisionId, parentArtifactId: parent, childArtifactId: artifactId, sourceNodeIds: [node.id], change: text ? "prompt" : "parameters", instruction: [text, ...edits.map(describeEdit)].filter(Boolean).join("; ").slice(0, 800), createdAt: now };
     next = { ...next, nodes: next.nodes.map((item) => (item.id === node.id ? { ...item, artifactId } : item)), artifacts: { ...next.artifacts, [artifactId]: artifact }, revisions: { ...next.revisions, [revisionId]: revision } };
   });
@@ -311,4 +332,31 @@ export function restoreVersion(state: RunInput, nodeId: string, artifactId: stri
   if (!node || node.type !== "generation") return { ok: false, message: "Only Generation nodes can switch versions." };
   if (state.artifacts[artifactId]?.sourceNodeId !== nodeId) return { ok: false, message: "That version was not produced by this node." };
   return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId } : item)) } };
+}
+
+// ---------------------------------------------------------------------------
+// Render artifacts (P0.16)
+// ---------------------------------------------------------------------------
+
+export type RenderRecord = { artifactId: string; width: number; height: number; bytes: number };
+
+/**
+ * Records a finished render as an immutable `render-png` artifact bound to the exact model and settings it was made
+ * from. The previous render stays in `artifacts`; the node simply points at the newest one.
+ */
+export function recordRender(state: RunInput, nodeId: string, record: RenderRecord, now: string): Mutation<{ state: RunInput }> {
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.type !== "render") return { ok: false, message: "Select a Render node." };
+  const result = evaluateGraph(state, state.artifacts)[nodeId];
+  if (!result || result.status === "blocked" || result.output.kind !== "spec") return { ok: false, message: "Connect a generated model to this Render node first." };
+  const settings = parseRenderSettings(node.params);
+  const artifact: Artifact = {
+    id: record.artifactId,
+    kind: "render-png",
+    sourceNodeId: nodeId,
+    createdAt: now,
+    storageKey: `asset:${record.artifactId}`,
+    metadata: { origin: "render", settings, width: record.width, height: record.height, bytes: record.bytes, inputKey: renderInputKey(result.output.spec, settings), parentArtifactId: upstreamArtifactId(state, nodeId) ?? null },
+  };
+  return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId: artifact.id } : item)), artifacts: { ...state.artifacts, [artifact.id]: artifact } } };
 }

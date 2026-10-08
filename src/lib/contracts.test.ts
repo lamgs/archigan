@@ -11,3 +11,17 @@ describe("contracts", () => {
     expect(generateRequestSchema.safeParse({ prompt: "A library", refinement: "", provider: "browser-key" }).success).toBe(false);
   });
 });
+
+describe("provider enum backward compatibility (ADR-017)", () => {
+  it("still accepts the original values and every newer hosted provider for settings and jobs", async () => {
+    const { projectSettingsSchema, providerSchema } = await import("./contracts");
+    for (const provider of ["procedural", "meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro"]) {
+      expect(providerSchema.safeParse(provider).success).toBe(true);
+      expect(projectSettingsSchema.safeParse({ provider }).success).toBe(true);
+    }
+    expect(providerSchema.safeParse("rodin").success).toBe(false);
+  });
+  it("opens a stored project saved with `meshy` or `procedural`", () => {
+    for (const provider of ["procedural", "meshy"]) expect(generateRequestSchema.safeParse({ prompt: "A library", provider, confirmSpend: provider === "meshy" }).success).toBe(true);
+  });
+});

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SiftProjectV2 as SiftProject } from "@/lib/contracts";
 import { EXAMPLE_PROMPTS, projectBrief } from "@/lib/projects";
+import { FEATURED_SAMPLE_ID, SAMPLE_BLURBS } from "@/lib/samples";
 import { deriveBuildingSpec, describeSpec, detectTypology } from "@/lib/typologies";
 
 type Props = {
@@ -13,6 +14,7 @@ type Props = {
   onNew: (example?: (typeof EXAMPLE_PROMPTS)[number]) => void;
   onOpen: (project: SiftProject) => void;
   onOpenSample: (sample: SiftProject) => void;
+  onImport: (file: File) => void;
   onRename: (project: SiftProject, name: string) => Promise<string | null>;
   onDelete: (project: SiftProject) => Promise<void>;
 };
@@ -66,19 +68,30 @@ function ProjectCard({ project, onOpen, onRename, onDelete }: { project: SiftPro
   );
 }
 
-export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, onOpenSample, onRename, onDelete }: Props) {
+export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, onOpenSample, onImport, onRename, onDelete }: Props) {
   const first = !loading && projects.length === 0;
+  const featured = samples.find((sample) => sample.id === FEATURED_SAMPLE_ID);
   return (
     <section className="dashboard" aria-label="Projects">
       <header className="dashboard__header">
         <div><span className="section-kicker">{first ? "Welcome" : "Workspace"}</span><h1>{first ? "Start your first study" : "Your studies"}</h1></div>
-        <button type="button" className="generate-button dashboard__new" onClick={() => onNew()}><span>New project</span><i aria-hidden="true">+</i></button>
+        <div className="dashboard__header-actions">
+          <label className="ghost-button dashboard__import">Import backup<input type="file" accept=".json,application/json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(file); event.target.value = ""; }} /></label>
+          <button type="button" className="generate-button dashboard__new" onClick={() => onNew()}><span>New project</span><i aria-hidden="true">+</i></button>
+        </div>
       </header>
       <p className="dashboard__notice" role="status">{notice}</p>
 
       {first && (
         <div className="dashboard__first-run">
-          <p>Describe a building and Sift shapes it into editable architectural massing. Start from an example brief:</p>
+          <p>Describe a building and Sift shapes it into editable architectural massing — right in your browser, no account needed.</p>
+          <ol className="steps">
+            <li><strong>Write a brief</strong> in the Prompt node.</li>
+            <li><strong>Run</strong> the Generation node to create a 3D model.</li>
+            <li><strong>Branch, edit, render</strong> variations, then export a PNG or GLB.</li>
+          </ol>
+          {featured && <button type="button" className="ghost-button dashboard__featured" onClick={() => onOpenSample(featured)}>Explore the Terraced Tower Study →</button>}
+          <p className="dashboard__fine">Or start from an example brief:</p>
           <div className="chip-row">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => onNew(example)}>{example.label}</button>)}</div>
         </div>
       )}
@@ -93,9 +106,9 @@ export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, o
       <h2 className="dashboard__section">Sample studies</h2>
       <ul className="project-grid">
         {samples.map((sample) => (
-          <li key={sample.id} className="project-card">
+          <li key={sample.id} className={`project-card${sample.id === FEATURED_SAMPLE_ID ? " project-card--featured" : ""}`}>
             <button type="button" className="project-card__open" onClick={() => onOpenSample(sample)}>
-              <strong>{sample.name}</strong><small>{summary(sample)}</small><small>Opens as an editable copy</small>
+              <strong>{sample.name}</strong><small>{SAMPLE_BLURBS[sample.id] ?? summary(sample)}</small><small>Opens as an editable copy</small>
             </button>
           </li>
         ))}

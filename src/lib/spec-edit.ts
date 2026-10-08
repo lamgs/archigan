@@ -1,4 +1,6 @@
 import { buildingSpecSchema, type BuildingSpec } from "./contracts";
+import { computeLayout } from "./geometry";
+import { layoutComplexity } from "./limits";
 
 type Volume = BuildingSpec["volumes"][number];
 type VolumeNumberField = "startFloor" | "floorCount" | "footprintScale" | "offsetX" | "offsetZ" | "rotationDegrees" | "taper";
@@ -85,7 +87,10 @@ export function applyEdit(spec: BuildingSpec, edit: SpecEdit): EditResult {
     }
   }
   const parsed = buildingSpecSchema.safeParse(next);
-  if (parsed.success) return { ok: true, spec: parsed.data };
+  if (parsed.success) {
+    const budget = layoutComplexity(computeLayout(parsed.data));
+    return budget.ok ? { ok: true, spec: parsed.data } : { ok: false, message: budget.message ?? "That change makes the building too complex." };
+  }
   const issue = parsed.error.issues[0];
   const field = issue?.path.filter((part) => typeof part === "string").pop();
   return { ok: false, message: issue ? `${field ? `${String(field)}: ` : ""}${issue.message}` : "That change is not valid." };
