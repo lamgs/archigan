@@ -28,7 +28,9 @@ GitHub commit statuses (context `Vercel`) show every deployment since `f43fc44` 
 
 **Outcome:** commit `6fa7198` (with `vercel.json`) reports GitHub status `success` ("Deployment has completed"), which supports that diagnosis. Application behavior behind Deployment Protection is still unverified. Earlier failed commits stay failed unless redeployed.
 
-Mitigation: `vercel.json` pins `framework: nextjs`, `npm ci`, `npm run build`, and clears the output-directory override. If the next deployment still fails, run `npx vercel inspect <dpl_id> --logs` (id is in the failing commit status `target_url`) and append the error here. Also check Project Settings → General: Framework Preset = Next.js, Root Directory empty, Node.js version 20.x–24.x.
+**Update:** the user reported the Vercel error `No Output Directory named "public" found after the Build completed` — confirming the project-level Output Directory is `public`. `outputDirectory: null` did not clear it, so `vercel.json` now sets `.next` explicitly. The proper long-term fix is also to clear the Output Directory override in Project Settings → Build & Development.
+
+Mitigation: `vercel.json` pins `framework: nextjs`, `npm ci`, `npm run build`, and sets `outputDirectory` to `.next`. If the next deployment still fails, run `npx vercel inspect <dpl_id> --logs` (id is in the failing commit status `target_url`) and append the error here. Also check Project Settings → General: Framework Preset = Next.js, Root Directory empty, Node.js version 20.x–24.x.
 
 ## Runtime configuration
 
