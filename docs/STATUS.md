@@ -1,7 +1,7 @@
 # Current status
 
 **Updated:** 2026-10-08  
-**Branch:** `main` (tracking `origin/main`)  
+**Branch:** `claude/determined-sagan-v8sy6v` (uncommitted P0.09 work)  
 **Milestone:** Phase 1 baseline complete; master-brief MVP gap closure active  
 **Overall:** Working local vertical slice, not yet MVP-complete
 
@@ -14,6 +14,7 @@
 
 ## Working now
 
+- Canonical v2 contracts (`BuildingSpec`, `Artifact`, `GenerationJob`, `DesignNode`/ports, `DesignRevision`, `SiftProjectV2`), graph connection/cycle validation, and a lossless v1→v2 migration. Storage writes v2 (`projects-v2`), reads legacy `projects-v1` read-only, preserves unreadable records, and saves in one atomic transaction.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -25,7 +26,8 @@
 ## Known limitations
 
 - Meshy has not been called with a real account; status must remain “unverified.”
-- The current graph is a guided lifecycle without typed ports, connection validation, project viewport restore, or executable artifact semantics.
+- The UI still renders the v1 projection (`toLegacyProject`); typed ports/validation exist in the domain layer but are not wired into React Flow `onConnect`, and the viewport is not yet restored.
+- Storage logic is covered via pure functions (`reconcileStores`); IndexedDB itself is not exercised by automated tests (no fake-indexeddb yet).
 - Current `MassingSpec` generates stacked-box studies; the canonical multi-volume `BuildingSpec` and three distinct typologies are not implemented.
 - Direct parameter controls, contextual inspector, non-destructive design branches, and restored lineage are not implemented.
 - Camera presets, expanded viewer, selectable render/material/lighting modes, render nodes, and resolution-specific PNG artifacts are not implemented.
@@ -38,7 +40,7 @@
 
 ## Verification
 
-- `npm run test`: passed, 2 files / 6 tests.
+- `npm run test`: passed, 3 files / 20 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -46,5 +48,5 @@
 
 ## Next action
 
-Implement `P0.09 Canonical domain contracts and migration`, then `P0.10 Architectural geometry engine`. These contracts unblock branching, typed canvas execution, persistence, rendering, and provider jobs. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement `P0.10 Architectural geometry engine` against `BuildingSpec` (the migrated spec is an approximation; exact legacy values live in artifact `metadata.legacyMassing`). Then P0.11–P0.14, which move the UI onto v2. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 

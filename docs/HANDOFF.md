@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Claude — P0.09 canonical contracts and migration
+
+- Added v2 Zod contracts to `contracts.ts`, port/connection/cycle validation in `graph.ts`, and v1→v2 migration plus `toLegacyProject` projection and `reconcileStores` in `migrate.ts`.
+- Hardened `storage.ts`: atomic `update`, no dropping of unreadable records, legacy key kept read-only (fixes the silent-data-loss risk found in review). UI is unchanged.
+- Checks: `npm run test` 20/20, `npm run lint` clean, `npm run build` passes. IndexedDB behavior itself is untested.
+- Open risks: legacy edges that break port rules are dropped on migration (UI `onConnect` still allows arbitrary wiring); `BuildingSpec` from migration is approximate; project list capped at 30.
+- Next: P0.10 geometry engine on `BuildingSpec`; consider adding `fake-indexeddb` tests. Review items not yet addressed: paid Meshy endpoint guard/status route (P0.18), tracked `__pycache__` files.
+
 ## 2026-10-08 — Codex — Vercel deployment recorded
 
 - Recorded the user-created `booth-os/archigan` Vercel project, deployment URL, and dashboard link in `DEPLOYMENT.md` and README.
