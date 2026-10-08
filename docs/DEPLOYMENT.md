@@ -46,6 +46,14 @@ HUNYUAN_ENABLED=true       FAL_KEY=<server-only secret>     # enables Hunyuan3D 
 
 `MESHY_ACCESS_CODE` / `MESHY_DAILY_LIMIT` remain accepted as fallbacks. Routes: `POST /api/generate` (body `provider`, `confirmSpend: true`; header `x-sift-access-code`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (status / cancel), `GET /api/generate/{taskId}/model?provider=<id>` (GLB ingest; only HTTPS hosts on the provider's allowlist are fetched, redirects refused, 100 MB cap, `glTF` magic check), `GET /api/providers` (secret-free catalog). Provider ids: `meshy`, `tripo`, `hunyuan3d-rapid`, `hunyuan3d-pro`.
 
+### Setting up (no vendor calls)
+
+1. Create a **throwaway, low-credit** key at each vendor you want (fal.ai → `FAL_KEY`, Tripo → `TRIPO_API_KEY`, Meshy → `MESHY_API_KEY`) and set a spend cap/alert in that vendor's dashboard. Never paste keys into chat, issues, or the repo.
+2. Generate a long random access code (e.g. `openssl rand -base64 24`) for `SIFT_ACCESS_CODE`.
+3. Set variables in Vercel → Project → Settings → Environment Variables (Production and/or Preview; mark Sensitive) or, locally, in `.env.local`. Enable one provider at a time: `HUNYUAN_ENABLED=true` / `TRIPO_ENABLED=true` / `MESHY_ENABLED=true`. Redeploy after changing Vercel variables.
+4. Run the offline preflight (reads env only; no network to any vendor; never prints secret values): `npm run check:hosted` (add `-- --url https://<deployment>` to also read your own app's `/api/providers`). Providers you enabled should read READY; the rest NOT READY.
+5. In the app, the picker should now show those providers as configured, still labelled **unverified**. Selecting one and confirming the dialog is what first spends money — that is the smoke test below, not setup.
+
 **Status: ALL UNVERIFIED.** Only mocked documented-contract tests exist; vendor docs for fal.ai and Tripo (and Meshy) were unreachable when the adapters were written. For each provider, use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
 
 1. Create task: `POST /api/generate` returns 202 with a task id; the vendor dashboard shows the task.

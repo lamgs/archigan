@@ -73,6 +73,10 @@ Record anything that stops or limits work here (with the date and what would unb
 - Server-only Meshy adapter boundary and configuration status.
 - Browser-verified prompt/refinement generation, IndexedDB save, 3D rendering, camera controls, and GLB export completion.
 
+## Hosted setup tooling
+
+`npm run check:hosted` (`scripts/check-hosted-config.mjs`) is an offline preflight for provider configuration (flags, keys, access code, `NEXT_PUBLIC_` mistakes); it makes no vendor calls. It only checks configuration — E1 stays open until a real-account smoke test is recorded.
+
 ## Known limitations
 
 - Meshy has not been called with a real account; status must remain “unverified.” Hosted results are fixed meshes (not editable); variation/render nodes need the Local provider’s parametric spec. The access code is held in memory only, so after a reload it must be re-entered to resume polling. Rate limits are per server instance (in-memory).
