@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { downloadGlbFor } from "./http";
-import { TRIPO_BASE_URL, tripoProvider, truncatePrompt } from "./tripo";
+import { TRIPO_BASE_URL, TRIPO_MODEL, tripoProvider, truncatePrompt } from "./tripo";
 
-// NOTE: documented-contract tests against a mocked fetch (contract UNVERIFIED). They do not prove live Tripo behaviour.
+// NOTE: documented-contract tests against a mocked fetch (v3 contract reconstructed from secondary sources, UNVERIFIED). They do not prove live Tripo behaviour.
 const json = (body: unknown, init: ResponseInit = {}) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" }, ...init });
 const glb = (extra = 20) => { const b = new Uint8Array(12 + extra); b.set([0x67, 0x6c, 0x54, 0x46]); return b.buffer; };
 const asFetch = (f: unknown) => f as typeof fetch;
@@ -31,15 +31,16 @@ describe("config", () => {
 });
 
 describe("create", () => {
-  it("POSTs text_to_model with bearer key and returns the task id", async () => {
+  it("POSTs v3 /generation/text-to-model with bearer key and returns the task id", async () => {
     const f = vi.fn(async (..._a: unknown[]) => json({ code: 0, data: { task_id: ID } }));
     await expect(tripoProvider.create("A tower", "with terraces", asFetch(f))).resolves.toBe(ID);
     const [url, init] = f.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${TRIPO_BASE_URL}/task`);
+    expect(url).toBe("https://openapi.tripo3d.ai/v3/generation/text-to-model");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tr_secret_key");
     const body = JSON.parse(String(init.body));
-    expect(body.type).toBe("text_to_model");
+    expect(body).toMatchObject({ model: TRIPO_MODEL, texture: false, pbr: false });
+    expect(body).not.toHaveProperty("type");
     expect(body.prompt).toMatch(/a tower with terraces/);
     expect(body.prompt.length).toBeLessThanOrEqual(1024);
   });
@@ -65,15 +66,16 @@ describe("status mapping", () => {
   it.each([["queued", "queued"], ["running", "running"], ["cancelled", "cancelled"]] as const)("maps %s", async (raw, expected) => {
     await expect(statusOf({ status: raw, progress: 41.6 })).resolves.toMatchObject({ providerTaskId: ID, status: expected, progress: 42 });
   });
-  it("requests GET /task/{id}", async () => {
+  it("requests GET /v3/tasks/{id}", async () => {
     const f = vi.fn(async (..._a: unknown[]) => task({ status: "running" }));
     await tripoProvider.status(ID, asFetch(f));
-    expect(f.mock.calls[0][0]).toBe(`${TRIPO_BASE_URL}/task/${ID}`);
+    expect(f.mock.calls[0][0]).toBe(`${TRIPO_BASE_URL}/tasks/${ID}`);
     expect((f.mock.calls[0][1] as RequestInit).method).toBe("GET");
   });
-  it("success yields glbUrl from each output shape, preferring pbr_model", async () => {
+  it("success yields glbUrl from each output shape, preferring v3 model_url", async () => {
     const u = (n: string) => `https://tripo-data.rg1.data.tripo3d.com/${n}.glb`;
-    await expect(statusOf({ status: "success", progress: 100, output: { pbr_model: u("pbr"), model: u("m") } })).resolves.toMatchObject({ status: "completed", glbUrl: u("pbr") });
+    await expect(statusOf({ status: "success", progress: 100, output: { model_url: u("mu"), pbr_model: u("pbr"), model: u("m") } })).resolves.toMatchObject({ status: "completed", glbUrl: u("mu") });
+    await expect(statusOf({ status: "success", output: { pbr_model: u("pbr"), model: u("m") } })).resolves.toMatchObject({ glbUrl: u("pbr") });
     await expect(statusOf({ status: "success", output: { model: u("m") } })).resolves.toMatchObject({ status: "completed", glbUrl: u("m"), progress: 100 });
     await expect(statusOf({ status: "success", output: { model_url: u("mu") } })).resolves.toMatchObject({ glbUrl: u("mu") });
     await expect(statusOf({ status: "success", output: { pbr_model: { url: u("obj") } } })).resolves.toMatchObject({ glbUrl: u("obj") });
@@ -110,6 +112,10 @@ describe("errors", () => {
   });
   it("reads Retry-After on 429", async () => {
     await expect(tripoProvider.status(ID, asFetch(async () => new Response("", { status: 429, headers: { "retry-after": "7" } })))).rejects.toMatchObject({ retryAfterSeconds: 7 });
+  });
+  it("maps HTTP 403 with envelope code 2010 to insufficient-credits, plain 403 to auth", async () => {
+    await expect(tripoProvider.create("x tower", "", asFetch(async () => json({ code: 2010, message: "no credit" }, { status: 403 })))).rejects.toMatchObject({ code: "insufficient-credits", retryable: false });
+    await expect(tripoProvider.create("x tower", "", asFetch(async () => new Response("nope", { status: 403 })))).rejects.toMatchObject({ code: "auth" });
   });
   it("maps network failures and timeouts", async () => {
     await expect(tripoProvider.status(ID, asFetch(async () => { throw new TypeError("fetch failed"); }))).rejects.toMatchObject({ code: "network", retryable: true });
