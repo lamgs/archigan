@@ -2,6 +2,13 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.12 typed executable canvas
+
+- UI moved onto `SiftProjectV2`: new `workflow.ts` (evaluate/connect/add/run/preview), typed handles in `studio-node.tsx`, rewritten `studio-shell.tsx` (add toolbar, Add-next menu, `isValidConnection`, viewport persistence). Storage API is v2-native; v1 samples moved to `legacy-fixtures.ts`; samples/projects are v2.
+- Checks: test 54/54, lint clean, build passes. Playwright: example → Run → preview, contextual Render add, invalid port drag rejected, prompt edit → out-of-date → re-run, pan + save + reload restores viewport/nodes/edges; no page errors.
+- Open risks: prompt dock removed (prompt now lives in the Prompt node); `/api/generate` legacy; render node inert; no per-node delete button (Backspace works).
+- Next: user reported failing Vercel preview deployment — debug first; then P0.13/P0.14.
+
 ## 2026-10-09 — Claude — P0.11 project dashboard and CRUD
 
 - Added `dashboard.tsx`, `projects.ts` (name validation, unique names, blank/sample-copy/rename helpers), `deleteProject` with tombstones in `storage.ts`, and `fake-indexeddb` (dev dep) storage tests. Shell now opens on the dashboard; brand/“All projects” returns to it; blank projects show example-brief chips and an empty preview.

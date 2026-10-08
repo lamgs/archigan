@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { SiftProject } from "@/lib/contracts";
-import { EXAMPLE_PROMPTS } from "@/lib/projects";
+import type { SiftProjectV2 as SiftProject } from "@/lib/contracts";
+import { EXAMPLE_PROMPTS, projectBrief } from "@/lib/projects";
 import { deriveBuildingSpec, describeSpec, detectTypology } from "@/lib/typologies";
 
 type Props = {
@@ -18,8 +18,9 @@ type Props = {
 };
 
 function summary(project: SiftProject) {
-  const spec = deriveBuildingSpec(project.prompt, project.refinement);
-  return `${describeSpec(spec).levels} levels · ${detectTypology(`${project.prompt} ${project.refinement}`.toLowerCase())}`;
+  const { prompt, refinement } = projectBrief(project);
+  if (!prompt) return "Empty — add a brief";
+  return `${describeSpec(deriveBuildingSpec(prompt, refinement)).levels} levels · ${detectTypology(`${prompt} ${refinement}`.toLowerCase())}`;
 }
 
 function ProjectCard({ project, onOpen, onRename, onDelete }: { project: SiftProject } & Pick<Props, "onOpen" | "onRename" | "onDelete">) {

@@ -1,6 +1,6 @@
 import { createStore, get, update } from "idb-keyval";
-import { siftProjectSchema, type SiftProject } from "./contracts";
-import { migrateProject, reconcileStores, toLegacyProject } from "./migrate";
+import { siftProjectV2Schema, type SiftProjectV2 } from "./contracts";
+import { reconcileStores } from "./migrate";
 
 const store = createStore("sift-projects", "projects");
 const LEGACY_KEY = "projects-v1"; // read-only; never rewritten or deleted
@@ -15,20 +15,13 @@ async function readAll() {
   return { v2Raw, legacyRaw, deleted: Array.isArray(deleted) ? deleted : [] };
 }
 
-export async function listProjects(): Promise<SiftProject[]> {
+export async function listProjects(): Promise<SiftProjectV2[]> {
   const { v2Raw, legacyRaw, deleted } = await readAll();
-  return reconcileStores(v2Raw, legacyRaw, deleted)
-    .projects.flatMap((project) => {
-      const legacy = toLegacyProject(project);
-      return legacy ? [legacy] : [];
-    })
-    .sort(byRecency);
+  return reconcileStores(v2Raw, legacyRaw, deleted).projects.sort(byRecency);
 }
 
-export async function saveProject(project: SiftProject) {
-  const parsed = siftProjectSchema.parse(project);
-  const migrated = migrateProject(parsed);
-  if (!migrated.ok) throw new Error(migrated.error);
+export async function saveProject(project: SiftProjectV2) {
+  const parsed = siftProjectV2Schema.parse(project);
   // Saving a previously deleted id (e.g. re-saving an open project) revives it.
   await update<string[]>(DELETED_KEY, (current) => (Array.isArray(current) ? current.filter((item) => item !== parsed.id) : []), store);
   const { legacyRaw, deleted } = await readAll();
@@ -38,7 +31,7 @@ export async function saveProject(project: SiftProject) {
     PROJECTS_KEY,
     (current) => {
       const { projects, preserved } = reconcileStores(current, legacyRaw, deleted);
-      const next = [migrated.project, ...projects.filter((item) => item.id !== migrated.project.id).sort(byRecency)].slice(0, MAX_PROJECTS);
+      const next = [parsed, ...projects.filter((item) => item.id !== parsed.id).sort(byRecency)].slice(0, MAX_PROJECTS);
       return [...next, ...preserved];
     },
     store,

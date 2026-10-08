@@ -80,7 +80,7 @@ describe("typologies", () => {
     expect(deriveBuildingSpec("A tower", "terracotta").facade.style).toBe("horizontal");
   });
   it("derives a valid spec for every bundled sample brief", async () => {
-    const { sampleProjects } = await import("./samples");
+    const { legacySamples: sampleProjects } = await import("./legacy-fixtures");
     sampleProjects.forEach((s) => expect(buildingSpecSchema.safeParse(deriveBuildingSpec(s.prompt, s.refinement)).success).toBe(true));
   });
 });

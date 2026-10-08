@@ -1,7 +1,8 @@
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { siftProjectSchema } from "./contracts";
-import { copyFromSample, createBlankProject, isBlankProject, renameProject, uniqueName, validateProjectName } from "./projects";
+import { siftProjectV2Schema } from "./contracts";
+import { copyFromSample, createBlankProject, isBlankProject, projectBrief, renameProject, uniqueName, validateProjectName } from "./projects";
+import { legacySamples } from "./legacy-fixtures";
 import { sampleProjects } from "./samples";
 
 const NOW = "2026-10-09T10:00:00.000Z";
@@ -20,15 +21,18 @@ describe("project helpers", () => {
     const blank = createBlankProject("a", NOW, ["Untitled study"]);
     expect(blank.name).toBe("Untitled study 2");
     expect(isBlankProject(blank)).toBe(true);
-    expect(siftProjectSchema.safeParse(blank).success).toBe(false); // not persistable yet
-    expect(siftProjectSchema.safeParse({ ...blank, prompt: "A tower" }).success).toBe(true);
+    expect(siftProjectV2Schema.safeParse(blank).success).toBe(true);
+    expect(blank.artifacts).toEqual({}); // nothing generated until the prompt has text
   });
   it("copies samples without touching the original", () => {
     const copy = copyFromSample(sampleProjects[0], "new-id", NOW, [sampleProjects[0].name]);
     expect(copy.id).toBe("new-id");
     expect(copy.name).toBe(`${sampleProjects[0].name} 2`);
     expect(sampleProjects[0].id).toBe("sample-courtyard");
-    expect(siftProjectSchema.safeParse(copy).success).toBe(true);
+    expect(siftProjectV2Schema.safeParse(copy).success).toBe(true);
+    expect(projectBrief(copy)).toEqual(projectBrief(sampleProjects[0]));
+    expect(Object.keys(copy.artifacts)).toHaveLength(1);
+    expect(copy.graph.nodes.every((node) => node.id.startsWith("new-id"))).toBe(true);
   });
   it("renames immutably and rejects invalid names", () => {
     const original = sampleProjects[1];
@@ -45,6 +49,7 @@ describe("storage CRUD (fake IndexedDB)", () => {
     vi.resetModules();
   });
   const mk = (id: string, name: string, updatedAt: string) => ({ ...sampleProjects[0], id, name, updatedAt });
+  const legacyMk = (id: string, name: string, updatedAt: string) => ({ ...legacySamples[0], id, name, updatedAt });
 
   it("saves, renames, lists newest first, and survives a reload", async () => {
     const storage = await import("./storage");
@@ -67,11 +72,20 @@ describe("storage CRUD (fake IndexedDB)", () => {
 
   it("keeps deleted legacy (v1-key) projects deleted and revives them if re-saved", async () => {
     const { createStore, set } = await import("idb-keyval");
-    await set("projects-v1", [mk("legacy", "Legacy", "2026-09-01T00:00:00.000Z")], createStore("sift-projects", "projects"));
+    await set("projects-v1", [legacyMk("legacy", "Legacy", "2026-09-01T00:00:00.000Z")], createStore("sift-projects", "projects"));
     const storage = await import("./storage");
     expect((await storage.listProjects()).map((p) => p.id)).toEqual(["legacy"]);
     expect(await storage.deleteProject("legacy")).toEqual([]);
     expect((await storage.saveProject(mk("legacy", "Back", "2026-10-05T00:00:00.000Z"))).map((p) => p.name)).toEqual(["Back"]);
+  });
+
+  it("persists the canvas viewport and graph through a reload", async () => {
+    const storage = await import("./storage");
+    await storage.saveProject({ ...mk("v", "Viewport", "2026-10-01T00:00:00.000Z"), viewport: { x: -120, y: 45, zoom: 0.65 } });
+    vi.resetModules();
+    const [project] = await (await import("./storage")).listProjects();
+    expect(project.viewport).toEqual({ x: -120, y: 45, zoom: 0.65 });
+    expect(project.graph).toEqual(sampleProjects[0].graph);
   });
 
   it("does not lose projects under concurrent saves", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateRequestSchema, siftProjectSchema } from "./contracts";
-import { sampleProjects } from "./samples";
+import { legacySamples as sampleProjects } from "./legacy-fixtures";
 
 describe("contracts", () => {
   it("accepts every bundled sample", () => {

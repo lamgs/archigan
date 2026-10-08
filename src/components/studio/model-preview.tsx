@@ -59,7 +59,7 @@ function download(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-export function ModelPreview({ spec, provider }: { spec: BuildingSpec; provider: Provider }) {
+export function ModelPreview({ spec, provider, stale = false }: { spec: BuildingSpec; provider: Provider; stale?: boolean }) {
   const canvasWrap = useRef<HTMLDivElement>(null);
   const summary = useMemo(() => describeSpec(spec), [spec]);
   const warnings = useMemo(() => computeLayout(spec).warnings, [spec]);
@@ -117,6 +117,7 @@ export function ModelPreview({ spec, provider }: { spec: BuildingSpec; provider:
           {exportState === "exporting" ? "Exporting…" : exportState === "complete" ? "GLB saved" : exportState === "error" ? "Retry GLB" : "GLB"}
         </button>
       </div>
+      {stale && <p className="preview-panel__note" role="status">Showing the last generated model — the prompt has changed since. Run the Generation node again.</p>}
       {warnings.length > 0 && <p className="preview-panel__note" role="status">{warnings[0]}</p>}
       <p className="preview-panel__note">Concept massing only — not BIM, engineering, or construction geometry.</p>
     </aside>

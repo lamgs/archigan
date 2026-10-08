@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildingSpecSchema, siftProjectV2Schema, type DesignEdge } from "./contracts";
 import { validateConnection, validateGraph } from "./graph";
 import { buildingSpecFromMassing, migrateProject, reconcileStores, toLegacyProject } from "./migrate";
-import { sampleProjects } from "./samples";
+import { legacySamples as sampleProjects } from "./legacy-fixtures";
 
 const validSpec = () => buildingSpecFromMassing("Test", sampleProjects[0].massing);
 const n = (id: string, type: "prompt" | "generation" | "variation" | "model" | "render") => ({ id, type });

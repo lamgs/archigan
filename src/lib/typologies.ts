@@ -24,6 +24,8 @@ function hash(value: string) {
 }
 const has = (text: string, terms: string[]) => terms.some((term) => text.includes(term));
 
+export const normalizeBriefText = normalizeBrief;
+
 export function detectTypology(brief: string): Typology {
   if (has(brief, ["twin", "two towers", "pair of towers", "paired"])) return "twin";
   if (has(brief, ["cylind", "round tower", "circular", "drum", "silo"])) return "cylindrical";
