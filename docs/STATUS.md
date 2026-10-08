@@ -1,9 +1,9 @@
 # Current status
 
-**Updated:** 2026-10-08  
-**Branch:** `claude/determined-sagan-v8sy6v` (uncommitted P0.09 work)  
-**Milestone:** Phase 1 baseline complete; master-brief MVP gap closure active  
-**Overall:** Working local vertical slice, not yet MVP-complete
+**Updated:** 2026-10-09  
+**Branch:** `claude/determined-sagan-v8sy6v` (work after merged PR #1; see git for clean/dirty state)  
+**Milestone:** All P0 tasks (P0.01–P0.21) implemented; P0 acceptance-gate review pending  
+**Overall:** Complete local-first MVP candidate. Not declared MVP-complete until the gate review below confirms the honest-reporting items (live Meshy, real-GPU/cross-browser testing) are accepted as documented exceptions.
 
 ## Deployment
 
@@ -37,6 +37,7 @@ Record anything that stops or limits work here (with the date and what would unb
 - Persistence: everything (graph, viewport, prompts, artifacts/specs, revisions, jobs, project + viewer settings, render PNG assets) is stored in browser IndexedDB only; autosave with a visible Saved/Unsaved/Saving/error badge; verified by a full-board restore test and a browser refresh test. Data is local to each browser profile and origin (no cloud sync until P1.01).
 - Hosted (Meshy) lifecycle — **unverified against a live account**: fail-closed paid-request guard, confirmation dialog naming Meshy, create/poll/cancel with normalized states, reload-resume (re-enter access code), GLB ingestion into IndexedDB, hosted model viewing/download. Verified only with mocked contract tests and a browser run against a mocked API.
 - Robustness: unsupported-WebGL, context-lost, render-error, too-complex, storage-unavailable, save-failed, missing-credential, and provider-failure states all have explicit UI with recovery paths (restart view, retry save, download backup/import backup). GPU resources are disposed (unit-tested) and the viewer idles at zero frames.
+- Portfolio sample: *Terraced Tower Study* (two retained branches with lineage + self-rendering Render node), Twin Towers and Cylindrical Residence presets, first-run guidance with the interpreter's vocabulary, responsive layouts verified at 1280/1024/768/390 px with axe scans.
 - Acceptance automation: 10 Playwright journeys (one per PRD acceptance scenario, incl. axe WCAG A/AA scans) against the production build + 17 jsdom component tests; screenshots retained in `docs/evidence/`. Run with `npm run test:e2e`.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
@@ -63,7 +64,7 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Verification
 
-- `npm run test`: passed, 17 files / 180 unit+component tests; 10 Playwright e2e tests.
+- `npm run test`: passed, 17 files / 190 unit+component tests; 18 Playwright e2e tests (10 acceptance scenarios, 4 portfolio, 4 responsive).
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -71,5 +72,4 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Next action
 
-Implement P0.21 (portfolio completion: Terraced Tower Study sample with two saved variations + a render and two distinct typology presets; first-run copy; responsive/accessibility review; README architecture/setup/credentials/tests/deploy/limitations/independence sections). Then the P0 acceptance gate review (all P0 boxes, all ten scenarios, live-provider status honestly reported), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
-
+Run the **P0 acceptance-gate review** (nothing new to build): (1) re-run `npm run lint && npm run test && npm run test:e2e` on the final commit; (2) check every P0 box and the ten scenarios in `PRODUCT_REQUIREMENTS.md` against `docs/evidence/`; (3) confirm each item in “Blockers and unverified items” is either resolved or knowingly accepted as an exception (live Meshy smoke test, real-GPU/Safari/Firefox/mobile pass, Vercel runtime check behind protection); (4) then decide whether to declare the MVP complete. Do not start P1 work (Supabase sync, Tripo, GLB import) before that decision.

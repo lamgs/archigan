@@ -7,7 +7,7 @@ import type { DesignEdge, DesignNode, DesignNodeType, GenerationJob as Generatio
 import { DEFAULT_VIEWER_SETTINGS } from "@/lib/viewer";
 import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, projectSignature, renameProject, validateProjectName } from "@/lib/projects";
-import { sampleProjects } from "@/lib/samples";
+import { SAMPLE_BLURBS, sampleProjects } from "@/lib/samples";
 import { applyTaskUpdate, buildHostedArtifact, completeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
 import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTask } from "@/lib/hosted-client";
 import { probeGpu, renderPng } from "@/lib/render-image";
@@ -60,6 +60,8 @@ function Studio() {
   const [renderError, setRenderError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const counter = useRef(0);
+  // Async work (saves, renders) must not apply its results to a different project than the one it started on.
+  const openProjectId = useRef("pending");
   const [storageOk, setStorageOk] = useState<boolean | null>(null);
   const [accessCode, setAccessCode] = useState("");
   const [confirm, setConfirm] = useState<{ nodeId: string; prompt: string } | null>(null);
@@ -106,8 +108,9 @@ function Studio() {
     setSaving(true);
     try {
       setSaved(await saveProject(project));
+      if (openProjectId.current !== project.id) return; // the user opened another project while this write was in flight
       // Merge only what the save produced. Replacing the whole state would roll back edits made while the write was in flight.
-      setMeta((current) => ({ ...current, name: project.name, updatedAt: project.updatedAt, artifacts: { ...current.artifacts, ...project.artifacts }, revisions: { ...current.revisions, ...project.revisions } }));
+      setMeta((current) => ({ ...current, name: project.name, updatedAt: project.updatedAt, artifacts: { ...current.artifacts, ...project.artifacts }, revisions: { ...current.revisions, ...project.revisions }, viewport: flow.getViewport() })); // programmatic fit-view emits no move event, so re-read the live viewport
       setSavedSig(projectSignature(project));
       setSaveFailed(false);
       setNodes((current) => current.map((node) => {
@@ -125,7 +128,7 @@ function Studio() {
 
   // Autosave: persist shortly after any change so a refresh never loses work. The ref keeps the timer on the latest closure.
   const persistRef = useRef(persist);
-  useEffect(() => { persistRef.current = persist; });
+  useEffect(() => { persistRef.current = persist; openProjectId.current = meta.id; });
   const dirty = savedSig !== null && signature !== savedSig;
   useEffect(() => {
     if (view !== "studio" || blank || !dirty) return;
@@ -145,7 +148,7 @@ function Studio() {
     const result = results[id];
     if (!node || !result || result.status === "blocked" || result.output.kind !== "spec") return setNotice("Connect a generated model to this Render node first.");
     const settings = parseRenderSettings(node.params);
-    if (!supportedResolutions(gpu ?? null).includes(settings.resolution)) return setRenderError("That resolution is not supported on this device. Choose another size.");
+    if (!supportedResolutions(gpu ?? null).includes(settings.resolution)) { setNotice("This device cannot render the image (WebGL or the chosen size is unavailable)."); return setRenderError("That resolution is not supported on this device. Choose another size."); }
     setRendering(true);
     setRenderError(null);
     try {
@@ -154,9 +157,22 @@ function Studio() {
       await saveAsset(`asset:${artifactId}`, image.blob);
       const recorded = recordRender({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, id, { artifactId, width: image.width, height: image.height, bytes: image.blob.size }, new Date().toISOString());
       if (!recorded.ok) return setRenderError(recorded.message);
+      if (openProjectId.current !== meta.id) {
+        // The user moved to another project while rendering: store the result on the project it belongs to, and leave the open one untouched.
+        const { autoRender: _auto, ...rest } = recorded.state.nodes.find((node) => node.id === id)?.params ?? {};
+        void _auto;
+        const finished = recorded.state.nodes.map((node) => (node.id === id ? { ...node, params: rest } : node));
+        await saveProject(buildProject({ ...meta, artifacts: recorded.state.artifacts }, { nodes: finished, edges: recorded.state.edges }, meta.viewport));
+        return;
+      }
       const next = { ...meta, artifacts: recorded.state.artifacts };
       setMeta(next);
-      setNodes((current) => current.map((item) => (item.id === id ? { ...item, data: { ...item.data, artifactId } } : item)));
+      setNodes((current) => current.map((item) => {
+        if (item.id !== id) return item;
+        const { autoRender: _auto, ...params } = item.data.params;
+        void _auto;
+        return { ...item, data: { ...item.data, params, artifactId } };
+      }));
       setNotice(`Rendered ${describeRender(settings)}.`);
       void persist(next, { nodes: recorded.state.nodes, edges: recorded.state.edges });
     } catch (error) {
@@ -165,6 +181,19 @@ function Studio() {
       setRendering(false);
     }
   };
+
+  // Samples ship Render nodes flagged `autoRender`; they render once, on open, from the current geometry code.
+  const renderNodeRef = useRef(renderNode);
+  useEffect(() => { renderNodeRef.current = renderNode; });
+  const autoRendered = useRef(new Set<string>());
+  const pendingAutoRender = view === "studio" && gpu !== undefined ? graph.nodes.find((node) => node.type === "render" && node.params.autoRender === true && !node.artifactId && results[node.id] && results[node.id].status !== "blocked") : undefined;
+  useEffect(() => {
+    if (!pendingAutoRender) return;
+    const key = `${meta.id}:${pendingAutoRender.id}`;
+    if (autoRendered.current.has(key)) return;
+    autoRendered.current.add(key);
+    void renderNodeRef.current(pendingAutoRender.id);
+  }, [pendingAutoRender, meta.id]);
 
   const setRenderSetting = (key: keyof RenderSettings, value: string) => {
     if (!selectedId) return;
@@ -533,13 +562,13 @@ function Studio() {
           <nav className="project-rail" aria-label="Projects">
             <div><span className="section-kicker">Starting points</span><h2>Studies</h2></div>
             <div className="sample-list">
-              {sampleProjects.map((sample, index) => <button type="button" key={sample.id} onClick={() => openSample(sample)}><span>0{index + 1}</span><strong>{sample.name}</strong><small>Open as copy</small></button>)}
+              {sampleProjects.map((sample, index) => <button type="button" key={sample.id} onClick={() => openSample(sample)}><span>0{index + 1}</span><strong>{sample.name}</strong><small>{SAMPLE_BLURBS[sample.id]?.replace("Featured · ", "") ?? "Open as copy"}</small></button>)}
             </div>
             <div className="saved-list"><span className="section-kicker">Saved here</span>{saved.length === 0 ? <p>No local projects yet.</p> : saved.slice(0, 4).map((item) => <button type="button" key={item.id} onClick={() => load(item)}>{item.name}</button>)}</div>
             <footer><span>Local-first</span><p>Your projects stay in this browser.</p></footer>
           </nav>
 
-          <section className={`canvas-panel ${inspectorCollapsed ? "canvas-panel--inspector-collapsed" : "canvas-panel--inspector-open"}`} aria-label="Generation workflow">
+          <section className={`canvas-panel ${inspectorCollapsed || !selectedNode ? "canvas-panel--inspector-collapsed" : "canvas-panel--inspector-open"}`} aria-label="Generation workflow">
             <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><span className="provider-chip" title="Change the provider in the Generation node inspector">{provider === "procedural" ? "Local procedural" : "Meshy (unverified)"}</span></header>
             <div className="add-toolbar" role="toolbar" aria-label="Add node">
               <span>Add</span>
@@ -561,7 +590,7 @@ function Studio() {
               revisionCount={Object.keys(meta.revisions).length}
               versions={selectedId ? versionsOf(meta, selectedId, selectedNode?.artifactId) : []}
               onRestore={restore}
-              collapsed={inspectorCollapsed}
+              collapsed={inspectorCollapsed || !selectedNode}
               error={editError}
               onToggle={() => setInspectorCollapsed((value) => !value)}
               onProvider={setProvider}
@@ -576,6 +605,7 @@ function Studio() {
               onCancelJob={() => void cancelJob()}
               onDownloadHosted={downloadHosted}
             />
+            {blank && <p className="canvas-hint">Start here: write a brief in the <strong>Prompt</strong> node (or pick an example below), then press <strong>Run</strong> on the <strong>Generation</strong> node.</p>}
             {blank && <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>}
           </section>
 

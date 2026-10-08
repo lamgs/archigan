@@ -26,6 +26,9 @@ const has = (text: string, terms: string[]) => terms.some((term) => text.include
 
 export const normalizeBriefText = normalizeBrief;
 
+/** What the local (offline) interpreter understands. Everything else in a brief is ignored, and the UI says so. */
+export const INTERPRETER_HELP = "The local engine reads these keywords: shape — twin, cylindrical/round, twist/spiral, pavilion/low-rise (otherwise a terraced tower); material — glass, brick/terracotta, concrete (otherwise limestone); form — tower/skyscraper (taller), terrace/stepped/setback/garden (stepped roof), gallery/museum/atrium (taller floors). Other words are ignored.";
+
 export function detectTypology(brief: string): Typology {
   if (has(brief, ["twin", "two towers", "pair of towers", "paired"])) return "twin";
   if (has(brief, ["cylind", "round tower", "circular", "drum", "silo"])) return "cylindrical";

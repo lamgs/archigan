@@ -119,7 +119,7 @@ test("4. two child revisions stay visible with lineage after reload", async ({ p
   const errors = watchErrors(page);
   await openStudio(page);
   await selectNode(page, "Generation");
-  await page.locator('button:has-text("Branch")').click();
+  await page.locator(".node-branch").click();
   await fitView(page);
   // Branch B (selected after branching): parameter edit.
   await pickVolume(page, "tower");
@@ -230,7 +230,7 @@ test("7. reload restores the complete board, settings, assets and jobs", async (
   const errors = watchErrors(page);
   await openStudio(page);
   await selectNode(page, "Generation");
-  await page.locator('button:has-text("Branch")').click();
+  await page.locator(".node-branch").click();
   await fitView(page);
   await selectNode(page, "Variation", 1);
   await page.locator('.node-next button:has-text("Render")').click();

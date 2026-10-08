@@ -90,10 +90,13 @@ export function createBlankProject(id: string, now: string, existingNames: strin
   return createWorkflowProject({ id, name: uniqueName("Untitled study", existingNames), now, prompt: "", refinement: "" });
 }
 
-/** Opening a sample creates an independent copy (new id, node/artifact ids rewritten) so the bundled sample is never overwritten. */
+/**
+ * Opening a sample creates an independent copy (new project id, fresh timestamps, unique name) so the bundled sample is
+ * never overwritten. Node/artifact ids are only unique within a project, so they can be kept; samples contain no binary
+ * assets (renders are produced on open), so no asset keys can collide between copies.
+ */
 export function copyFromSample(sample: SiftProjectV2, id: string, now: string, existingNames: string[]): SiftProjectV2 {
-  const brief = projectBrief(sample);
-  return createWorkflowProject({ id, name: uniqueName(sample.name, existingNames), now, ...brief });
+  return { ...structuredClone(sample), id, name: uniqueName(sample.name, existingNames), createdAt: now, updatedAt: now };
 }
 
 export function renameProject(project: SiftProjectV2, rawName: string, now: string): { ok: true; project: SiftProjectV2 } | { ok: false; error: string } {

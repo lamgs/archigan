@@ -157,6 +157,7 @@ export function runGeneration(state: RunInput, nodeId: string, provider: Provide
   const node = state.nodes.find((item) => item.id === nodeId);
   if (!node || node.type !== "generation") return { ok: false, message: "Select a generation node to run." };
   if (provider !== "procedural") return { ok: false, message: "Hosted generation is not available yet; switch to Local." };
+  if (ids.artifact in state.artifacts || ids.job in state.jobs || ids.revision in state.revisions) return { ok: false, message: "Generated ids collide with existing records; try again." };
   const input = incoming(state, nodeId);
   const source = input && evaluateGraph(state, state.artifacts)[input.source];
   if (!source) return { ok: false, message: "Connect a prompt to this generation node." };
@@ -196,6 +197,7 @@ export function editNodeGeometry(state: RunInput, nodeId: string, edit: SpecEdit
   const results = evaluateGraph(state, state.artifacts);
   const current = results[nodeId];
   if (!current || current.status === "blocked" || current.output.kind !== "spec") return { ok: false, message: "This node has no model to edit yet." };
+  if (node.type === "generation" && (ids.artifact in state.artifacts || ids.revision in state.revisions)) return { ok: false, message: "Generated ids collide with existing records; try again." };
 
   if (node.type === "variation") {
     const edits = mergeEdit(variationEdits(node), edit);
@@ -255,6 +257,15 @@ export function branchFrom(graph: FlowGraph, sourceId: string, ids: { variation:
 
 const recipeKey = (node: DesignNode, parent: string | undefined) => JSON.stringify({ text: nodeText(node), edits: variationEdits(node), parent });
 
+/** Asks the id generator for ids until one is unused, so an immutable record can never be overwritten by a collision. */
+function uniqueId(newId: (prefix: string) => string, prefix: string, taken: (candidate: string) => boolean) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const candidate = newId(prefix);
+    if (!taken(candidate)) return candidate;
+  }
+  throw new Error(`Could not generate an unused ${prefix} id.`);
+}
+
 /**
  * Snapshots every Variation node whose recipe (follow-up text + parameter edits, over its current parent artifact)
  * changed since its last snapshot: a new immutable artifact plus a revision from the parent artifact.
@@ -272,9 +283,9 @@ export function commitVariations(state: RunInput, newId: (prefix: string) => str
     if (current.artifactId && next.artifacts[current.artifactId]?.metadata.recipeKey === key) return;
     const result = evaluateGraph(next, next.artifacts)[node.id];
     if (!result || result.status === "blocked" || result.output.kind !== "spec" || !parent) return;
-    const artifactId = newId("artifact");
+    const artifactId = uniqueId(newId, "artifact", (candidate) => candidate in next.artifacts);
     const artifact: Artifact = { id: artifactId, kind: "building-spec", sourceNodeId: node.id, createdAt: now, storageKey: `inline:${artifactId}`, metadata: { spec: result.output.spec, brief: result.output.brief, origin: "variation", recipeKey: key, parentArtifactId: parent } };
-    const revisionId = newId("rev");
+    const revisionId = uniqueId(newId, "rev", (candidate) => candidate in next.revisions);
     const revision: DesignRevision = { id: revisionId, parentArtifactId: parent, childArtifactId: artifactId, sourceNodeIds: [node.id], change: text ? "prompt" : "parameters", instruction: [text, ...edits.map(describeEdit)].filter(Boolean).join("; ").slice(0, 800), createdAt: now };
     next = { ...next, nodes: next.nodes.map((item) => (item.id === node.id ? { ...item, artifactId } : item)), artifacts: { ...next.artifacts, [artifactId]: artifact }, revisions: { ...next.revisions, [revisionId]: revision } };
   });

@@ -7,6 +7,7 @@ import { LIMITS, type SpecEdit } from "@/lib/spec-edit";
 import { CAMERA_PRESETS, MODE_LABELS, PRESET_LABELS, VIEW_MODES } from "@/lib/viewer";
 import type { GenerationJob } from "@/lib/contracts";
 import { describeJob, isActiveJob } from "@/lib/hosted";
+import { INTERPRETER_HELP } from "@/lib/typologies";
 import { NODE_LABELS, type LineageEntry } from "@/lib/workflow";
 
 type Limit = { min: number; max: number; step: number };
@@ -209,12 +210,13 @@ export function Inspector({ node, spec, blockedMessage, provider, meshyConfigure
     <aside className={`inspector ${collapsed ? "is-collapsed" : ""}`} aria-label="Node inspector">
       <header>
         <div><span className="section-kicker">Inspector</span><h2>{node ? NODE_LABELS[node.type] : "Nothing selected"}</h2></div>
-        <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? "Expand inspector" : "Collapse inspector"}>{collapsed ? "‹" : "›"}</button>
+        {(node || !collapsed) && <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? "Expand inspector" : "Collapse inspector"}>{collapsed ? "‹" : "›"}</button>}
       </header>
       {!collapsed && (
         <div className="inspector__body">
           {!node && <p className="inspector__hint">Select a node on the canvas to see its settings.</p>}
           {node?.type === "prompt" && <p className="inspector__hint">Write the brief in the node. {String(node.params.text ?? "").length}/800 characters. Connect it to a Generation node, then press Run.</p>}
+          {(node?.type === "prompt" || node?.type === "variation") && <p className="inspector__hint">{INTERPRETER_HELP}</p>}
           {node?.type === "generation" && (
             <fieldset>
               <legend>Provider</legend>

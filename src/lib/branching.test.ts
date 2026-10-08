@@ -100,3 +100,20 @@ describe("restoreVersion", () => {
     expect(restoreVersion(state, "p-variation", "a1")).toMatchObject({ ok: false });
   });
 });
+
+describe("id collisions never overwrite immutable records", () => {
+  it("commitVariations skips ids already in use", () => {
+    let state = generated();
+    state = withVariationText(state, "p-variation", "glass");
+    const colliding = (prefix: string) => (prefix === "artifact" ? "a1" : `${prefix}-fresh`); // "a1" is the generation artifact
+    const first = commitVariations(state, (() => { let n = 0; return (prefix: string) => (n++ === 0 ? colliding(prefix) : `${prefix}-ok-${n}`); })(), NOW);
+    expect(first.artifacts.a1).toEqual(state.artifacts.a1); // untouched
+    expect(Object.keys(first.artifacts)).toHaveLength(2);
+    expect(() => commitVariations(state, (prefix) => (prefix === "artifact" ? "a1" : "r-x"), NOW)).toThrow(/unused artifact id/);
+  });
+  it("runGeneration and editNodeGeometry refuse colliding ids", () => {
+    const state = generated();
+    expect(runGeneration(state, "p-generation", "procedural", { artifact: "a1", job: "j9", revision: "r9" }, NOW)).toMatchObject({ ok: false, message: expect.stringMatching(/collide/) });
+    expect(editNodeGeometry(state, "p-generation", { op: "volume", id: "tower", field: "floorCount", value: 9 }, { artifact: "a1", revision: "r9" }, NOW)).toMatchObject({ ok: false });
+  });
+});

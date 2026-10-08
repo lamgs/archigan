@@ -59,7 +59,12 @@ export async function reopenFirstProject(page: Page) {
 
 /** Waits for autosave to settle. */
 export async function savedBadge(page: Page) {
-  await expect(page.locator(".save-badge")).toContainText("Saved", { timeout: 10_000 });
+  try {
+    await expect(page.locator(".save-badge")).toContainText("Saved", { timeout: 10_000 });
+  } catch (error) {
+    const state = await page.evaluate(() => ({ badge: document.querySelector(".save-badge")?.textContent, notice: document.querySelector(".save-state")?.textContent, banner: document.querySelector(".banner")?.textContent?.slice(0, 80), url: location.href }));
+    throw new Error(`Autosave did not settle: ${JSON.stringify(state)}\n${(error as Error).message}`);
+  }
 }
 
 /** Decodes PNG bytes in the browser: real dimensions plus how much of the image differs from its corner colour. */

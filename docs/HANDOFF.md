@@ -2,6 +2,15 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.21 portfolio completion (all P0 tasks implemented)
+
+- Samples: `buildTerracedTowerStudy()` (built with the real domain functions; two branches, lineage, Render node with `autoRender`), plus Twin Towers and Cylindrical Residence; Courtyard Commons removed (ADR-011). `copyFromSample` now clones the whole board. First-run steps + “Explore the Terraced Tower Study”, canvas hint, `INTERPRETER_HELP` surfaced in inspector.
+- Responsive rework (ADR-012): fixed hidden Save/All-projects/Import buttons on phones, hidden project name, inspector overlapping the canvas, stale prompt-dock CSS, media queries being overridden by later base rules; idle inspector is a slim tab; minimap hidden on small screens.
+- **Bugs found by the new tests and fixed:** (1) deterministic sample ids collided with the generation artifact so a variation snapshot silently overwrote it → id collision guards in `commitVariations`/`runGeneration`/`editNodeGeometry`; (2) a render (or in-flight save) finishing after the user opened another project applied the first project’s state to the second (name/meta swapped) → `openProjectId` guard, regression-tested (mutation-checked); (3) autosave looped “Unsaved changes” because programmatic fit-view left `meta.viewport` stale → viewport re-read after save; (4) “crown roof” wording in samples was not understood by the local interpreter → samples use only honoured words and the vocabulary is documented in the UI.
+- Docs: README rewritten (features, architecture, setup, credentials, tests, deploy, limitations, independence); ARCHITECTURE.md rewritten to match the code; STATUS/TASKS updated.
+- Checks: lint clean, tsc clean, build passes, 190 unit/component tests, 18 Playwright tests (passed twice in a row), `npm audit` clean.
+- Next: P0 gate review (see STATUS “Next action”). Remaining honest exceptions: live Meshy unverified; Chromium/software-GPU only; Vercel runtime behind protection unchecked.
+
 ## 2026-10-09 — Claude — P0.20 acceptance automation
 
 - Added `@playwright/test`, `@axe-core/playwright`, jsdom + Testing Library (dev deps; `npm audit` clean), `playwright.config.ts` (production build via `next start`, container Chromium auto-detected), `e2e/helpers.ts` (IDB reader, canvas fingerprint, PNG decoder, minimal GLB builder, hosted-API fake, error watcher) and `e2e/acceptance.spec.ts` with one test per PRD scenario; `npm run test:e2e` / `test:all`; evidence screenshots + rendered PNGs in `docs/evidence/`.

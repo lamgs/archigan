@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SiftProjectV2 as SiftProject } from "@/lib/contracts";
 import { EXAMPLE_PROMPTS, projectBrief } from "@/lib/projects";
+import { FEATURED_SAMPLE_ID, SAMPLE_BLURBS } from "@/lib/samples";
 import { deriveBuildingSpec, describeSpec, detectTypology } from "@/lib/typologies";
 
 type Props = {
@@ -69,6 +70,7 @@ function ProjectCard({ project, onOpen, onRename, onDelete }: { project: SiftPro
 
 export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, onOpenSample, onImport, onRename, onDelete }: Props) {
   const first = !loading && projects.length === 0;
+  const featured = samples.find((sample) => sample.id === FEATURED_SAMPLE_ID);
   return (
     <section className="dashboard" aria-label="Projects">
       <header className="dashboard__header">
@@ -82,7 +84,14 @@ export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, o
 
       {first && (
         <div className="dashboard__first-run">
-          <p>Describe a building and Sift shapes it into editable architectural massing. Start from an example brief:</p>
+          <p>Describe a building and Sift shapes it into editable architectural massing — right in your browser, no account needed.</p>
+          <ol className="steps">
+            <li><strong>Write a brief</strong> in the Prompt node.</li>
+            <li><strong>Run</strong> the Generation node to create a 3D model.</li>
+            <li><strong>Branch, edit, render</strong> variations, then export a PNG or GLB.</li>
+          </ol>
+          {featured && <button type="button" className="ghost-button dashboard__featured" onClick={() => onOpenSample(featured)}>Explore the Terraced Tower Study →</button>}
+          <p className="dashboard__fine">Or start from an example brief:</p>
           <div className="chip-row">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => onNew(example)}>{example.label}</button>)}</div>
         </div>
       )}
@@ -97,9 +106,9 @@ export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, o
       <h2 className="dashboard__section">Sample studies</h2>
       <ul className="project-grid">
         {samples.map((sample) => (
-          <li key={sample.id} className="project-card">
+          <li key={sample.id} className={`project-card${sample.id === FEATURED_SAMPLE_ID ? " project-card--featured" : ""}`}>
             <button type="button" className="project-card__open" onClick={() => onOpenSample(sample)}>
-              <strong>{sample.name}</strong><small>{summary(sample)}</small><small>Opens as an editable copy</small>
+              <strong>{sample.name}</strong><small>{SAMPLE_BLURBS[sample.id] ?? summary(sample)}</small><small>Opens as an editable copy</small>
             </button>
           </li>
         ))}

@@ -60,3 +60,15 @@ v2 projects persist under `projects-v2`; the legacy `projects-v1` key is read-on
 
 Building specifications, GLB models, and PNG renders are immutable artifacts. Edits create child revisions connected to their source. Provider job state is mutable execution metadata and is stored separately from artifact state. This separation prevents silent design loss and makes graph lineage and recovery testable.
 
+## ADR-011 — Bundled samples are built from domain functions; featured sample renders itself
+
+**Status:** accepted, 2026-10-09
+
+`samples.ts` builds the featured *Terraced Tower Study* with the same functions the UI uses (`createWorkflowProject`, `branchFrom`, `editNodeGeometry`, `commitVariations`), so samples can never drift from real behaviour and stay deterministic. Samples contain no binary assets: the Render node is flagged `autoRender` and renders once when the sample is opened, so the image always matches the current geometry code. Opening a sample copies it under a new project id (node/artifact ids are only unique per project and are kept). The earlier *Courtyard Commons* sample was removed because courtyard voids are not modelled (it implied a capability that does not exist); *River Archive* and *Spiral Habitat* remain, and *Twin Towers on a Shared Podium* and *Cylindrical Residence* were added so three typologies are demonstrated. Sample wording uses only words the local interpreter honours (see `INTERPRETER_HELP`).
+
+## ADR-012 — Responsive layout stacks below 900 px
+
+**Status:** accepted, 2026-10-09
+
+Below 900 px the board, inspector, and viewer stack vertically (the page scrolls) instead of overlapping; the left rail hides below 1320 px (samples/projects are on the dashboard); the minimap hides on small screens; the inspector collapses to a slim tab until a node is selected. Responsive CSS lives at the end of `globals.css` so it overrides the base rules.
+
