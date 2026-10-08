@@ -264,3 +264,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .field--stack { grid-template-columns: 1fr; }
 .progress { height: 6px; background: #e4dfd2; border-radius: 3px; overflow: hidden; }
 .progress > i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+
+.viewer-fallback { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 10px; padding: 24px; text-align: center; background: var(--paper-deep); }
+.viewer-fallback h3 { margin: 0; font: 400 20px Georgia, serif; }
+.viewer-fallback p { margin: 0; max-width: 340px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.viewer-fallback__actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.viewer-fallback__actions button { border: 1px solid var(--ink); border-radius: 999px; background: var(--ink); color: white; padding: 8px 14px; font-size: 11px; cursor: pointer; }
+.banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 18px; border-bottom: 1px solid #d9b3ab; background: #f6e3df; color: #6e2018; font-size: 12px; }
+.banner button { border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; padding: 4px 12px; font-size: 11px; cursor: pointer; }
+.banner button:hover { background: #6e2018; color: white; }
+.studio-shell:has(.banner) .workspace, .studio-shell:has(.banner) .dashboard { height: calc(100vh - 68px - 41px); }
+
+.dashboard__header-actions { display: flex; align-items: flex-end; gap: 12px; }
+.dashboard__import { cursor: pointer; }

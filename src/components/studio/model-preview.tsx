@@ -6,8 +6,11 @@ import { Box3, MathUtils, Object3D, OrthographicCamera, PerspectiveCamera, Spher
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BuildingSpec, Provider, ViewerSettings } from "@/lib/contracts";
 import { computeLayout } from "@/lib/geometry";
+import { countObjectTriangles, layoutComplexity, MESH_LIMITS } from "@/lib/limits";
+import { probeGpu } from "@/lib/render-image";
 import { buildBuildingGroup, disposeBuildingGroup } from "@/lib/three-building";
 import { describeSpec } from "@/lib/typologies";
+import { ViewerBoundary, ViewerFallback } from "./viewer-fallback";
 import { CAMERA_PRESETS, DEFAULT_VIEWER_SETTINGS, MODE_LABELS, PERSPECTIVE_FOV, PRESET_LABELS, VIEW_MODES, metricsFromSize, presetPose, sceneMetrics, type CameraPreset, type SceneMetrics, type ViewMode } from "@/lib/viewer";
 
 export type HostedPreview = { blob: Blob; label: string };
@@ -142,11 +145,20 @@ function download(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
+/** Lightweight GPU diagnostics (counts only) used by automated leak checks; exposes no model data. */
+function exposeDiagnostics(gl: { info: { memory: { geometries: number; textures: number }; programs?: unknown[] | null; render: { frame: number } } }) {
+  (window as unknown as { __siftGpu?: () => { geometries: number; textures: number; programs: number; frames: number } }).__siftGpu = () => ({ geometries: gl.info.memory.geometries, textures: gl.info.memory.textures, programs: gl.info.programs?.length ?? 0, frames: gl.info.render.frame });
+}
+
 function Toggle({ label, pressed, onChange, shortcut }: { label: string; pressed: boolean; onChange: (value: boolean) => void; shortcut?: string }) {
   return <button type="button" aria-pressed={pressed} aria-keyshortcuts={shortcut} className="viewer-toggle" onClick={() => onChange(!pressed)}>{label}</button>;
 }
 
-export function ModelPreview({ spec, hosted, provider, stale = false, settings = DEFAULT_VIEWER_SETTINGS, onSettings }: { spec?: BuildingSpec; hosted?: HostedPreview; provider: Provider; stale?: boolean; settings?: ViewerSettings; onSettings?: (settings: ViewerSettings) => void }) {
+export function ModelPreview({ spec: specProp, hosted, provider, stale = false, settings = DEFAULT_VIEWER_SETTINGS, onSettings }: { spec?: BuildingSpec; hosted?: HostedPreview; provider: Provider; stale?: boolean; settings?: ViewerSettings; onSettings?: (settings: ViewerSettings) => void }) {
+  // Callers recompute specs as fresh objects on unrelated state changes (autosave, selection); key by content so the
+  // model is only rebuilt (and GPU buffers re-uploaded) when the geometry actually changes.
+  const specKey = specProp ? JSON.stringify(specProp) : "";
+  const spec = useMemo(() => (specKey ? (JSON.parse(specKey) as BuildingSpec) : undefined), [specKey]);
   const canvasWrap = useRef<HTMLDivElement>(null);
   const focusButton = useRef<HTMLButtonElement>(null);
   const rig = useRef<RigHandle | null>(null);
@@ -161,6 +173,10 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
   const [focus, setFocus] = useState(false);
   const [frameToken, setFrameToken] = useState(0);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "complete" | "error">("idle");
+  const [webglSupported] = useState(() => probeGpu() !== null);
+  const [contextLost, setContextLost] = useState(false);
+  const [canvasKey, setCanvasKey] = useState(0);
+  const [pngError, setPngError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState<LoadedHosted | null>(null);
   const [hostedError, setHostedError] = useState<string | null>(null);
   const hostedBlob = hosted?.blob;
@@ -175,6 +191,7 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
         const box = new Box3().setFromObject(gltf.scene);
         const raw = box.getSize(new Vector3());
         if (!Number.isFinite(raw.x + raw.y + raw.z) || raw.x + raw.y + raw.z === 0) throw new Error("empty");
+        if (countObjectTriangles(gltf.scene) > MESH_LIMITS.maxHostedTriangles) throw new Error("heavy");
         const metrics = metricsFromSize([raw.x, raw.y, raw.z]);
         const holder = new Object3D();
         gltf.scene.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
@@ -183,7 +200,7 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
         setLoaded({ blob: hostedBlob, object: holder, metrics });
         setHostedError(null);
       } catch {
-        if (!cancelled) { setLoaded(null); setHostedError("The hosted model could not be displayed."); }
+        if (!cancelled) { setLoaded(null); setHostedError("This hosted model is too detailed (or not readable) to preview here. You can still download the GLB."); }
       }
     })();
     return () => { cancelled = true; };
@@ -192,6 +209,7 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
   const showHosted = Boolean(hostedBlob);
   const summary = useMemo(() => (spec ? describeSpec(spec) : { levels: 0, volumes: 0, footprint: "" }), [spec]);
   const layout = useMemo(() => (spec ? computeLayout(spec) : { slabs: [], bounds: { min: [0, 0, 0] as [number, number, number], max: [1, 1, 1] as [number, number, number] }, floors: 0, warnings: [] as string[] }), [spec]);
+  const complexity = useMemo(() => layoutComplexity(layout), [layout]);
   const metrics = useMemo(() => (showHosted ? hostedReady?.metrics ?? metricsFromSize([1, 1, 1]) : sceneMetrics(layout)), [showHosted, hostedReady, layout]);
 
   const closeFocus = useCallback(() => { setFocus(false); focusButton.current?.focus(); }, []);
@@ -206,12 +224,15 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
 
   const exportPng = () => {
     const canvas = canvasWrap.current?.querySelector("canvas");
-    canvas?.toBlob((blob) => blob && download(blob, "sift-study.png"), "image/png");
+    setPngError(null);
+    if (!canvas) return setPngError("There is no 3D view to capture right now.");
+    canvas.toBlob((blob) => (blob ? download(blob, "sift-study.png") : setPngError("The browser could not capture the view as a PNG.")), "image/png");
   };
 
   const exportGlb = async () => {
     if (hosted) { download(hosted.blob, "sift-hosted-model.glb"); setExportState("complete"); return; }
     if (!spec) return;
+    if (!complexity.ok) { setExportState("error"); return; }
     setExportState("exporting");
     const group: Group = buildBuildingGroup(spec); // always the shaded model, independent of the viewer mode
     try {
@@ -261,7 +282,14 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
       </div>
 
       <div className="preview-panel__canvas" ref={canvasWrap} tabIndex={0} role="application" aria-label="3D viewport. Arrow keys orbit, plus and minus zoom, F frames the model." onKeyDown={onKeyDown} onWheel={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-        <Canvas frameloop="always" shadows={shadows ? "basic" : false} gl={{ antialias: true, preserveDrawingBuffer: true }} camera={{ position: [56, 42, 56], fov: PERSPECTIVE_FOV }}>
+        {!webglSupported ? (
+          <ViewerFallback title="3D preview unavailable" message="This browser or device cannot create a WebGL context, so the 3D view and PNG renders are disabled. Your project, inspector edits, and GLB download still work." actions={spec && complexity.ok ? [{ label: "Download GLB", onClick: () => void exportGlb() }] : []} />
+        ) : !complexity.ok && !showHosted ? (
+          <ViewerFallback title="Model too complex to preview" message={complexity.message ?? "This building exceeds the preview limits."} />
+        ) : (
+          <>
+            <ViewerBoundary resetKey={canvasKey} onReset={() => setCanvasKey((value) => value + 1)}>
+        <Canvas key={canvasKey} frameloop="demand" dpr={[1, 1.75]} shadows={shadows ? "basic" : false} gl={{ antialias: true, preserveDrawingBuffer: true, powerPreference: "high-performance" }} camera={{ position: [56, 42, 56], fov: PERSPECTIVE_FOV }} onCreated={({ gl, invalidate }) => { exposeDiagnostics(gl); const canvas = gl.domElement; canvas.addEventListener("webglcontextlost", (event) => { event.preventDefault(); setContextLost(true); }); canvas.addEventListener("webglcontextrestored", () => { setContextLost(false); invalidate(); }); }}>
           <color attach="background" args={["#d9d3c6"]} />
           <fog attach="fog" args={["#d9d3c6", 70, 160]} />
           <ambientLight intensity={mode === "wireframe" ? 0.4 : 1.1} />
@@ -271,6 +299,10 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
           {axes && <axesHelper args={[Math.max(10, metrics.size[0])]} position={[-metrics.size[0] / 2 - 2, 0, metrics.size[2] / 2 + 2]} />}
           <CameraRig preset={preset} metrics={metrics} frameToken={frameToken} onRig={onRig} />
         </Canvas>
+            </ViewerBoundary>
+            {contextLost && <ViewerFallback title="Graphics context lost" message="The browser reclaimed the graphics card (often after many tabs or a sleep). Your project is safe." actions={[{ label: "Restore 3D view", onClick: () => { setContextLost(false); setCanvasKey((value) => value + 1); } }]} />}
+          </>
+        )}
         <div className="preview-panel__caption">
           {showHosted ? <><span>{hosted?.label}</span><span>not editable</span><span>unverified</span></> : <><span>{summary.levels} levels</span><span>{summary.volumes} {summary.volumes === 1 ? "volume" : "volumes"}</span><span>{summary.footprint}</span></>}
         </div>
@@ -285,6 +317,8 @@ export function ModelPreview({ spec, hosted, provider, stale = false, settings =
           {exportState === "exporting" ? "Exporting…" : exportState === "complete" ? "GLB saved" : exportState === "error" ? "Retry GLB" : "GLB"}
         </button>
       </div>
+      {pngError && <p className="preview-panel__note" role="alert">{pngError}</p>}
+      {exportState === "error" && !complexity.ok && <p className="preview-panel__note" role="alert">GLB export was blocked because the model exceeds the complexity limit.</p>}
       {hostedError && <p className="preview-panel__note" role="alert">{hostedError}</p>}
       {showHosted && <p className="preview-panel__note">Hosted Meshy mesh — a fixed model, not editable geometry. Hosted generation is unverified against a live account.</p>}
       {stale && <p className="preview-panel__note" role="status">Showing the last generated model — the prompt has changed since. Run the Generation node again.</p>}

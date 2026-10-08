@@ -13,6 +13,7 @@ type Props = {
   onNew: (example?: (typeof EXAMPLE_PROMPTS)[number]) => void;
   onOpen: (project: SiftProject) => void;
   onOpenSample: (sample: SiftProject) => void;
+  onImport: (file: File) => void;
   onRename: (project: SiftProject, name: string) => Promise<string | null>;
   onDelete: (project: SiftProject) => Promise<void>;
 };
@@ -66,13 +67,16 @@ function ProjectCard({ project, onOpen, onRename, onDelete }: { project: SiftPro
   );
 }
 
-export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, onOpenSample, onRename, onDelete }: Props) {
+export function Dashboard({ projects, samples, loading, notice, onNew, onOpen, onOpenSample, onImport, onRename, onDelete }: Props) {
   const first = !loading && projects.length === 0;
   return (
     <section className="dashboard" aria-label="Projects">
       <header className="dashboard__header">
         <div><span className="section-kicker">{first ? "Welcome" : "Workspace"}</span><h1>{first ? "Start your first study" : "Your studies"}</h1></div>
-        <button type="button" className="generate-button dashboard__new" onClick={() => onNew()}><span>New project</span><i aria-hidden="true">+</i></button>
+        <div className="dashboard__header-actions">
+          <label className="ghost-button dashboard__import">Import backup<input type="file" accept=".json,application/json" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(file); event.target.value = ""; }} /></label>
+          <button type="button" className="generate-button dashboard__new" onClick={() => onNew()}><span>New project</span><i aria-hidden="true">+</i></button>
+        </div>
       </header>
       <p className="dashboard__notice" role="status">{notice}</p>
 

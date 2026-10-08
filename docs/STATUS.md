@@ -21,6 +21,7 @@ Record anything that stops or limits work here (with the date and what would unb
 | --- | --- | --- | --- |
 | 2026-10-09 | `docs.meshy.ai` is blocked by the agent network proxy (WebFetch `EGRESS_BLOCKED`); only search snippets were readable. | The Meshy adapter follows the publicly documented contract as summarized by search (statuses, endpoints, DELETE 409 on running tasks); exact response field names (`model_urls`, `task_error`, `expires_at`) are unconfirmed, so parsing is lenient and everything is labelled **unverified**. | Allow `docs.meshy.ai` through the proxy, or paste the Text-to-3D reference; or run one real task and compare the JSON. |
 | 2026-10-09 | No Meshy API key/account in this environment. | No live hosted call has ever been made. Only mocked documented-contract tests exist; `verified` is hard-wired `false`. | A paid Meshy key set as `MESHY_API_KEY` (+ `MESHY_ENABLED=true`, `MESHY_ACCESS_CODE`) in a trusted environment, then the manual smoke test in `DEPLOYMENT.md`. |
+| 2026-10-09 | All WebGL checks ran in headless Chromium on SwiftShader (software rendering) in this container. | Real-GPU frame rates, memory pressure, mobile GPUs, Safari/Firefox, and the `deviceMemory` heuristic for 1920×1080 are untested. | Manual pass on real desktop + mobile devices/browsers; record results here. |
 | 2026-10-09 | `vercel.com` / `api.vercel.com` are unreachable and no Vercel token is available. | Build logs and the deployed app (behind Deployment Protection) cannot be inspected by the agent; deploy health is inferred from GitHub commit statuses only. | An authorized Vercel identity (`vercel inspect <id> --logs`), or the user pasting logs/errors. |
 
 ## Working now
@@ -35,6 +36,7 @@ Record anything that stops or limits work here (with the date and what would unb
 - Render pipeline: Render nodes render offscreen at exact pixel sizes, persist PNG assets outside the project record, track freshness, offer download/preview in the inspector; deleting a project deletes its render assets.
 - Persistence: everything (graph, viewport, prompts, artifacts/specs, revisions, jobs, project + viewer settings, render PNG assets) is stored in browser IndexedDB only; autosave with a visible Saved/Unsaved/Saving/error badge; verified by a full-board restore test and a browser refresh test. Data is local to each browser profile and origin (no cloud sync until P1.01).
 - Hosted (Meshy) lifecycle — **unverified against a live account**: fail-closed paid-request guard, confirmation dialog naming Meshy, create/poll/cancel with normalized states, reload-resume (re-enter access code), GLB ingestion into IndexedDB, hosted model viewing/download. Verified only with mocked contract tests and a browser run against a mocked API.
+- Robustness: unsupported-WebGL, context-lost, render-error, too-complex, storage-unavailable, save-failed, missing-credential, and provider-failure states all have explicit UI with recovery paths (restart view, retry save, download backup/import backup). GPU resources are disposed (unit-tested) and the viewer idles at zero frames.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -60,7 +62,7 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Verification
 
-- `npm run test`: passed, 15 files / 153 tests.
+- `npm run test`: passed, 16 files / 164 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -68,5 +70,5 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Next action
 
-Implement P0.19 (robust states and performance: WebGL error boundary/unsupported-WebGL fallback, mesh limits/throttling, persistence-failure and recovery UI, GPU cleanup verification), then P0.20 (Playwright acceptance automation for the ten PRD scenarios), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement P0.20 (commit Playwright acceptance automation for the ten scenarios in `PRODUCT_REQUIREMENTS.md`, with retained screenshots; add component tests; wire `npm run test:e2e`), then P0.21 (portfolio completion: Terraced Tower Study sample with two saved variations + render, README), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 

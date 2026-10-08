@@ -66,3 +66,18 @@ export async function loadAsset(key: string): Promise<Blob | null> {
 export async function deleteAssets(keys: string[]) {
   await Promise.all(keys.map((key) => del(key, assetStore)));
 }
+
+/** Checks that IndexedDB actually works (it can be blocked, full, or absent in private/locked-down browsers). */
+export async function probeStorage(timeoutMs = 3000): Promise<boolean> {
+  try {
+    const attempt = (async () => {
+      await set("__probe__", Date.now(), store);
+      const value = await get("__probe__", store);
+      await del("__probe__", store);
+      return typeof value === "number";
+    })();
+    return await Promise.race([attempt, new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs))]);
+  } catch {
+    return false;
+  }
+}

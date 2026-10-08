@@ -12,7 +12,8 @@ import { applyTaskUpdate, buildHostedArtifact, completeJob, failJob, isActiveJob
 import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTask } from "@/lib/hosted-client";
 import { probeGpu, renderPng } from "@/lib/render-image";
 import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
-import { deleteProject, listProjects, loadAsset, saveAsset, saveProject } from "@/lib/storage";
+import { backupFilename, exportProjectJson, parseProjectJson } from "@/lib/backup";
+import { deleteProject, listProjects, loadAsset, probeStorage, saveAsset, saveProject } from "@/lib/storage";
 import type { SpecEdit } from "@/lib/spec-edit";
 import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, recordRender, restoreVersion, runGeneration, versionsOf, type FlowGraph } from "@/lib/workflow";
 import { Dashboard } from "./dashboard";
@@ -59,6 +60,7 @@ function Studio() {
   const [renderError, setRenderError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const counter = useRef(0);
+  const [storageOk, setStorageOk] = useState<boolean | null>(null);
   const [accessCode, setAccessCode] = useState("");
   const [confirm, setConfirm] = useState<{ nodeId: string; prompt: string } | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -72,6 +74,7 @@ function Studio() {
 
   useEffect(() => {
     void listProjects().then(setSaved).catch(() => setNotice("Local storage is unavailable; this session still works.")).finally(() => setLoadingProjects(false));
+    void probeStorage().then(setStorageOk);
     queueMicrotask(() => setGpu(probeGpu())); // browser-only capability probe
     void fetch("/api/providers").then((response) => response.json()).then((data: { meshy?: { configured?: boolean } }) => setMeshyConfigured(Boolean(data.meshy?.configured))).catch(() => setMeshyConfigured(false));
   }, []);
@@ -167,6 +170,29 @@ function Studio() {
     if (!selectedId) return;
     setRenderError(null);
     setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, params: { ...node.data.params, [key]: value } } } : node)));
+  };
+
+  const downloadBackup = () => {
+    const project = buildProject(meta, graph, flow.getViewport());
+    const blob = new Blob([exportProjectJson(project)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    Object.assign(document.createElement("a"), { href: url, download: backupFilename(project) }).click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice("Backup downloaded. Render images and hosted models are not included in backups.");
+  };
+
+  const importBackup = async (file: File) => {
+    const parsed = parseProjectJson(await file.text(), () => crypto.randomUUID(), saved.map((item) => item.id));
+    if (!parsed.ok) return setNotice(parsed.error);
+    const project = { ...parsed.project, name: validateProjectName(parsed.project.name).ok ? parsed.project.name : "Imported project" };
+    if (storageOk === false) { loadNow(project); return setNotice("Imported for this session only — browser storage is unavailable. " + parsed.warnings.join(" ")); }
+    try {
+      setSaved(await saveProject(project));
+      loadNow(project);
+      setNotice(["Project imported.", ...parsed.warnings].join(" "));
+    } catch {
+      setNotice("Could not save the imported project to IndexedDB.");
+    }
   };
 
   // ---- Hosted (Meshy) generation: explicit confirmation → create → poll → ingest GLB → persist -------------------------
@@ -493,8 +519,15 @@ function Studio() {
         <div className="topbar__actions"><span className="save-badge" data-state={saveLabel.state} role="status" aria-live="polite">{saveLabel.text}</span><span className="save-state" role="status">{notice}</span>{view === "studio" && <button type="button" className="ghost-button" onClick={() => void persist()}>Save project</button>}{view === "studio" && <button type="button" className="ghost-button" onClick={() => void goToDashboard()}>All projects</button>}</div>
       </header>
 
+      {(storageOk === false || saveFailed) && (
+        <div className="banner" role="alert">
+          <span>{storageOk === false ? "Browser storage is unavailable (private browsing or blocked), so nothing can be saved. Changes will be lost when you close this tab." : "The last save failed (storage may be full or blocked). Your open project is unchanged, but is not saved."}</span>
+          {view === "studio" && <button type="button" onClick={downloadBackup}>Download backup</button>}
+          {view === "studio" && storageOk !== false && <button type="button" onClick={() => void persist()}>Retry save</button>}
+        </div>
+      )}
       {view === "dashboard" ? (
-        <Dashboard projects={saved} samples={sampleProjects} loading={loadingProjects} notice={notice} onNew={startNew} onOpen={load} onOpenSample={openSample} onRename={renameSaved} onDelete={deleteSaved} />
+        <Dashboard projects={saved} samples={sampleProjects} loading={loadingProjects} notice={notice} onNew={startNew} onOpen={load} onOpenSample={openSample} onImport={(file) => void importBackup(file)} onRename={renameSaved} onDelete={deleteSaved} />
       ) : (
         <section className="workspace" id="workspace">
           <nav className="project-rail" aria-label="Projects">

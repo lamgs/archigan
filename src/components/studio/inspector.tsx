@@ -122,12 +122,13 @@ function RenderPanel({ state, canRender, onSetting, onRender }: { state: RenderP
         <legend>Output</legend>
         <label className="field"><span>Resolution</span>
           <select value={settings.resolution} disabled={state.resolutions.length === 0} onChange={(event) => onSetting("resolution", event.target.value)}>
-            {state.resolutions.length === 0 && <option>Checking device…</option>}
+            {state.resolutions.length === 0 && <option>{state.gpuKnown ? "Unavailable" : "Checking device…"}</option>}
             {state.resolutions.map((id) => <option key={id} value={id}>{RESOLUTIONS[id].label}</option>)}
             {state.resolutions.length > 0 && !state.resolutions.includes(settings.resolution) && <option value={settings.resolution} disabled>{RESOLUTIONS[settings.resolution].label} — not supported here</option>}
           </select>
         </label>
-        {state.gpuKnown && !state.resolutions.includes("1920x1080") && <p className="inspector__hint">1920 × 1080 is not offered on this device.</p>}
+        {state.gpuKnown && state.resolutions.length === 0 && <p role="alert" className="inspector__error">This browser cannot create WebGL images, so renders are unavailable here. Try a different browser or enable hardware acceleration.</p>}
+        {state.gpuKnown && state.resolutions.length > 0 && !state.resolutions.includes("1920x1080") && <p className="inspector__hint">1920 × 1080 is not offered on this device.</p>}
         <button type="button" className="ghost-button" disabled={!canRender || state.busy || !state.resolutions.includes(settings.resolution)} onClick={onRender}>{state.busy ? "Rendering…" : "Render PNG"}</button>
         {state.error && <p role="alert" className="inspector__error">{state.error}</p>}
       </fieldset>
@@ -218,7 +219,7 @@ export function Inspector({ node, spec, blockedMessage, provider, meshyConfigure
             <fieldset>
               <legend>Provider</legend>
               <label className="radio"><input type="radio" name="provider" checked={provider === "procedural"} onChange={() => onProvider("procedural")} /> Local procedural <small>no account needed</small></label>
-              <label className="radio"><input type="radio" name="provider" checked={provider === "meshy"} onChange={() => onProvider("meshy")} /> Meshy (paid) <small>{meshyConfigured ? "configured · unverified" : "not configured"}</small></label>
+              <label className="radio"><input type="radio" name="provider" checked={provider === "meshy"} disabled={!meshyConfigured && provider !== "meshy"} onChange={() => onProvider("meshy")} /> Meshy (paid) <small>{meshyConfigured ? "configured · unverified" : "unavailable — not configured on this server"}</small></label>
             </fieldset>
           )}
           {node?.type === "generation" && provider === "meshy" && <HostedSection state={hosted} onAccessCode={onAccessCode} onCancel={onCancelJob} onDownload={onDownloadHosted} />}

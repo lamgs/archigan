@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.19 robust states and performance
+
+- Added `limits.ts` (triangle/mesh budgets; enforced in `applyEdit`, viewer, GLB export; hosted GLB triangle cap), `backup.ts` (JSON export/import with validation, id-collision copy, missing-asset warnings), `probeStorage`, `viewer-fallback.tsx` (`ViewerFallback`, `ViewerBoundary`), `app/error.tsx`; viewer now probes WebGL, handles context loss with a restore button, uses `frameloop="demand"`, dpr cap, content-keyed spec (stops needless rebuilds on every autosave), PNG error feedback, GPU diagnostics hook `window.__siftGpu` (counts only). Banner for storage unavailable/save failed with Download backup / Retry save; dashboard “Import backup”.
+- Checks: test 164/164, lint clean, build passes. Playwright: no-WebGL browser (fallback, GLB download, inspector, render-panel message), no-IndexedDB browser (banner, backup file), import backup, GPU geometry stable after heavy churn, idle 0 frames/2.5 s, context-loss → restore, 20 sequential 1024² offscreen renders OK.
+- Found/fixed: viewer rebuilt the whole model on every unrelated state change; triangle cap (120k) was unreachable under the 240-floor schema cap → set to 60k.
+- Open risks / blockers (see STATUS table): software-rasterizer-only GPU testing; backups exclude binary assets; Playwright scripts are still scratch files (P0.20 commits them).
+- Next: P0.20 acceptance automation.
+
 ## 2026-10-09 — Claude — P0.18 Meshy async lifecycle (unverified live)
 
 - Server: rewrote `providers/meshy.ts` (lenient normalization, error mapping, timeouts, allowlisted size-capped GLB download), added `providers/guard.ts` (fail-closed config, access code, per-IP + daily limiter) and `hosted-http.ts`; routes `POST /api/generate`, `GET|DELETE /api/generate/[taskId]`, `GET .../model`; `/api/providers` now also reports `accessCodeRequired`.
