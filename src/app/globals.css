@@ -214,3 +214,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .canvas-panel--inspector-collapsed .flow-wrap { right: 130px; }
 .canvas-panel--inspector-open .chip-row--canvas { right: 340px; }
 .inspector { top: 118px; bottom: 16px; max-height: none; }
+
+.node-label { font: 400 11px Arial, sans-serif; color: var(--accent); letter-spacing: .04em; }
+.studio-node--generation .node-label { color: #dc897b; }
+.node-branch { margin: 10px 0 0 6px; border: 1px solid currentColor; border-radius: 999px; background: transparent; color: inherit; padding: 6px 12px; font-size: 11px; cursor: pointer; }
+.node-branch:hover { background: var(--accent); border-color: var(--accent); color: white; }
+.versions { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 11px; }
+.versions li { display: grid; gap: 2px; padding: 6px 8px; border-left: 2px solid var(--line); background: rgba(255,255,255,.5); }
+.versions li.is-current { border-left-color: var(--accent); }
+.versions small { color: var(--muted); }
+.versions button { justify-self: start; margin-top: 3px; border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: 2px 9px; font-size: 10px; cursor: pointer; }
+.versions button:hover { background: var(--ink); color: white; }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { BuildingSpec, DesignNode, Provider } from "@/lib/contracts";
 import { LIMITS, type SpecEdit } from "@/lib/spec-edit";
-import { NODE_LABELS } from "@/lib/workflow";
+import { NODE_LABELS, type LineageEntry } from "@/lib/workflow";
 
 type Limit = { min: number; max: number; step: number };
 
@@ -99,6 +99,8 @@ type Props = {
   provider: Provider;
   meshyConfigured: boolean;
   revisionCount: number;
+  versions: LineageEntry[];
+  onRestore: (artifactId: string) => void;
   collapsed: boolean;
   error: string | null;
   onToggle: () => void;
@@ -107,7 +109,7 @@ type Props = {
   onClearEdits: () => void;
 };
 
-export function Inspector({ node, spec, blockedMessage, provider, meshyConfigured, revisionCount, collapsed, error, onToggle, onProvider, onEdit, onClearEdits }: Props) {
+export function Inspector({ node, spec, blockedMessage, provider, meshyConfigured, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits }: Props) {
   const editable = node && (node.type === "generation" || node.type === "variation") && spec;
   return (
     <aside className={`inspector ${collapsed ? "is-collapsed" : ""}`} aria-label="Node inspector">
@@ -133,6 +135,21 @@ export function Inspector({ node, spec, blockedMessage, provider, meshyConfigure
               <Geometry key={node.id + spec.volumes.map((v) => v.id).join()} spec={spec} onEdit={onEdit} />
               {node.type === "variation" && Array.isArray(node.params.edits) && node.params.edits.length > 0 && <button type="button" className="ghost-button" onClick={onClearEdits}>Clear parameter edits</button>}
             </>
+          )}
+          {versions.length > 0 && node && (
+            <fieldset>
+              <legend>Versions &amp; lineage</legend>
+              <ol className="versions">
+                {versions.map((entry, index) => (
+                  <li key={entry.artifactId} className={entry.current ? "is-current" : ""}>
+                    <strong>v{index + 1}{entry.current ? " · current" : ""}</strong>
+                    <span>{entry.instruction}</span>
+                    <small>{entry.origin} · {new Date(entry.createdAt).toLocaleTimeString()}</small>
+                    {!entry.current && node.type === "generation" && <button type="button" onClick={() => onRestore(entry.artifactId)}>Use this version</button>}
+                  </li>
+                ))}
+              </ol>
+            </fieldset>
           )}
           {node && (node.type === "generation" || node.type === "variation") && !spec && <p className="inspector__hint">{blockedMessage || "Run the generation to unlock geometry controls."}</p>}
           {node?.type === "model" && <p className="inspector__hint">This node displays the upstream model. Edit geometry on its Generation or Variation node. Camera presets and view modes arrive with the expanded viewer.</p>}

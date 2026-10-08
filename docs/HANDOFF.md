@@ -2,6 +2,13 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.14 non-destructive branching
+
+- Added `branchFrom`, `commitVariations`, `upstreamArtifactId`, `lineageOf`, `versionsOf`, `restoreVersion` to `workflow.ts`; Branch button on nodes, lane labels, versions fieldset in the inspector; `persist` now snapshots changed variations before saving (also triggered by textarea blur and inspector edits).
+- Checks: test 71/71, lint clean, build passes. Playwright: branch → edit branch B floors, follow-up prompt on branch A → distinct previews → save → reload → identical geometry, labels, 6 nodes / 5 edges, correct per-branch version history; no page errors.
+- Open risks: variation display still derives from its recipe (snapshots are lineage records, not the render source); no UI to delete a branch other than Backspace on nodes (artifacts remain); snapshots accumulate with each recipe change; blur-triggered autosave also saves other pending edits.
+- Next: P0.15 expanded viewer.
+
 ## 2026-10-09 — Claude — P0.13 contextual inspector (+ Vercel output directory)
 
 - Added `spec-edit.ts` (typed `SpecEdit`, `applyEdit` validated through `buildingSpecSchema`, replay/merge helpers), `editNodeGeometry` in `workflow.ts`, and `inspector.tsx`; canvas shrinks to make room for the inspector; provider switch moved from the header into the Generation inspector.

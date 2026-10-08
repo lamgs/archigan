@@ -20,6 +20,7 @@
 - Project dashboard (`dashboard.tsx`, `projects.ts`): first-run empty state with example briefs, new/open/rename/delete with confirmation, samples open as editable copies, autosave on Generate. Storage CRUD is tested against `fake-indexeddb`.
 - Typed executable canvas: prompt/generation/variation/model/render nodes with typed ports, validated wiring (type mismatch, duplicate input, cycles rejected), add toolbar and contextual “Add next”, Run creates an immutable building-spec artifact + job (+ revision link on re-run), stale detection, persisted viewport. App state is now `SiftProjectV2` end to end; v1 exists only for migration (`legacy-fixtures.ts`).
 - Contextual inspector: provider choice (Generation node), full geometry controls (footprint, floor height, per-volume floors/scale/offset/twist/taper/setbacks, facade, roof, materials) with validated edits; edits on a Generation node make a new artifact + revision, edits on a Variation node are stored on that node; nothing overwrites the source artifact.
+- Non-destructive branching: Branch action, labelled lanes (Branch A/B/…), per-branch artifacts + revisions with the shared parent, version list in the inspector, “Use this version” on Generation nodes. Browser-verified: two branches with different geometry stay distinct and restore identically after reload.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -31,7 +32,7 @@
 ## Known limitations
 
 - Meshy has not been called with a real account; status must remain “unverified.”
-- Render nodes have no behavior until P0.16; `/api/generate` still returns legacy `MassingSpec` and is unused by the UI; variation nodes derive their spec live (not yet persisted as child artifacts — P0.14).
+- Render nodes have no behavior until P0.16; `/api/generate` still returns legacy `MassingSpec` and is unused by the UI; variation nodes derive their spec live (snapshotted for lineage only) (not yet persisted as child artifacts — P0.14).
 - Storage logic is covered via pure functions (`reconcileStores`); IndexedDB itself is not exercised by automated tests (no fake-indexeddb yet).
 - Variation output is derived live from prompt+refinement (not persisted as an artifact, not directly parameter-editable until P0.13/P0.14). Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is now unused.
 - Direct parameter controls, contextual inspector, non-destructive design branches, and restored lineage are not implemented.
@@ -45,7 +46,7 @@
 
 ## Verification
 
-- `npm run test`: passed, 7 files / 63 tests.
+- `npm run test`: passed, 8 files / 71 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -53,5 +54,5 @@
 
 ## Next action
 
-Implement P0.14 (non-destructive branching: visible lineage/two branches restored after reload; the revision data model already exists), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement P0.15 (expanded 3D viewer: focus mode, bounds framing, camera presets, grid/axes/shadow toggles, view modes), then P0.16 (render artifacts), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 

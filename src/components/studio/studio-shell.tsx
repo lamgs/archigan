@@ -9,7 +9,7 @@ import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NO
 import { sampleProjects } from "@/lib/samples";
 import { deleteProject, listProjects, saveProject } from "@/lib/storage";
 import type { SpecEdit } from "@/lib/spec-edit";
-import { addConnectedNode, addNode, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, runGeneration, type FlowGraph } from "@/lib/workflow";
+import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, restoreVersion, runGeneration, versionsOf, type FlowGraph } from "@/lib/workflow";
 import { Dashboard } from "./dashboard";
 import { Inspector } from "./inspector";
 import { StudioNode, type StudioFlowNode } from "./studio-node";
@@ -25,7 +25,7 @@ const PORT_COLORS: Record<string, string> = { prompt: "#8f2f24", "building-spec"
 function toFlowNodes(graph: FlowGraph): StudioFlowNode[] {
   return graph.nodes.map((node) => ({
     id: node.id, type: "studio", position: node.position,
-    data: { type: node.type, params: node.params, artifactId: node.artifactId, status: "blocked", message: "", summary: "", nextTypes: [], onText: () => {}, onAdd: () => {}, onRun: () => {} },
+    data: { type: node.type, params: node.params, artifactId: node.artifactId, status: "blocked", message: "", summary: "", nextTypes: [], onText: () => {}, onAdd: () => {}, onRun: () => {}, onBranch: () => {}, onCommit: () => {} },
   }));
 }
 function toFlowEdges(graph: FlowGraph): Edge[] {
@@ -74,10 +74,17 @@ function Studio() {
     if (!named.ok) return setNotice(named.error);
     if (g.nodes.filter((node) => node.type === "prompt").every((node) => !String(node.params.text ?? "").trim())) return setNotice("Add an architectural brief before saving.");
     const viewport = flow.getViewport();
-    const project = buildProject({ ...base, name: named.name }, g, viewport);
+    // Record lineage: snapshot any variation whose follow-up text or parameter edits changed since its last snapshot.
+    const committed = commitVariations({ ...g, artifacts: base.artifacts, jobs: base.jobs, revisions: base.revisions }, uid, new Date().toISOString());
+    const committedMeta = { ...base, name: named.name, artifacts: committed.artifacts, revisions: committed.revisions };
+    const project = buildProject(committedMeta, { nodes: committed.nodes, edges: committed.edges }, viewport);
     try {
       setSaved(await saveProject(project));
       setMeta(metaOf(project));
+      setNodes((current) => current.map((node) => {
+        const updated = committed.nodes.find((item) => item.id === node.id);
+        return updated && updated.artifactId !== node.data.artifactId ? { ...node, data: { ...node.data, artifactId: updated.artifactId } } : node;
+      }));
       setNotice("Project saved in this browser.");
     } catch {
       setNotice("Could not write to IndexedDB; your open session is unchanged.");
@@ -122,9 +129,29 @@ function Studio() {
   const applyGraph = (next: FlowGraph) => {
     setNodes((current) => {
       const known = new Map(current.map((node) => [node.id, node]));
-      return toFlowNodes(next).map((node) => known.get(node.id) ?? node);
+      return toFlowNodes(next).map((node) => {
+        const existing = known.get(node.id);
+        return existing ? { ...existing, data: { ...existing.data, params: node.data.params, artifactId: node.data.artifactId } } : node;
+      });
     });
     setEdges(toFlowEdges(next));
+  };
+
+  const branch = (sourceId: string) => {
+    const result = branchFrom(graph, sourceId, { variation: uid("variation"), model: uid("model"), edgeA: uid("edge"), edgeB: uid("edge") });
+    if (!result.ok) return setNotice(result.message);
+    applyGraph(result.graph);
+    setNodes((current) => current.map((node) => ({ ...node, selected: node.id === result.variationId })));
+    setNotice("Branched: a new variation lane starts from the same source. Edit it in the inspector or add a follow-up prompt.");
+  };
+
+  const restore = (artifactId: string) => {
+    if (!selectedId) return;
+    const result = restoreVersion({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, selectedId, artifactId);
+    if (!result.ok) return setNotice(result.message);
+    setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, artifactId } } : node)));
+    setNotice("Switched to the earlier version; later versions are kept.");
+    void persist(meta, { nodes: result.state.nodes, edges: result.state.edges });
   };
 
   const add = (sourceId: string, type: DesignNodeType) => {
@@ -153,7 +180,7 @@ function Studio() {
     const result = results[node.id];
     const status = !result ? "blocked" : result.status;
     const summary = result && result.status !== "blocked" && result.output.kind === "spec" ? `${Math.max(...result.output.spec.volumes.map((v) => v.startFloor + v.floorCount))} levels · ${result.output.spec.volumes.length} ${result.output.spec.volumes.length === 1 ? "volume" : "volumes"}` : "";
-    return { ...node, data: { ...node.data, status, message: result?.status === "blocked" ? result.message : "", summary, nextTypes: nextNodeTypes(node.data.type), onText: setParam, onAdd: add, onRun: run } };
+    return { ...node, data: { ...node.data, status, message: result?.status === "blocked" ? result.message : "", summary, nextTypes: nextNodeTypes(node.data.type), onText: setParam, onAdd: add, onRun: run, onBranch: branch, onCommit: () => { if (!blank) void persist(); } } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [nodes, results, graph, meta]);
 
@@ -258,6 +285,8 @@ function Studio() {
               provider={provider}
               meshyConfigured={meshyConfigured}
               revisionCount={Object.keys(meta.revisions).length}
+              versions={selectedId ? versionsOf(meta, selectedId, selectedNode?.artifactId) : []}
+              onRestore={restore}
               collapsed={inspectorCollapsed}
               error={editError}
               onToggle={() => setInspectorCollapsed((value) => !value)}

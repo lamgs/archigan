@@ -202,3 +202,113 @@ export function editNodeGeometry(state: RunInput, nodeId: string, edit: SpecEdit
   const revision: DesignRevision = { id: ids.revision, parentArtifactId: parent.id, childArtifactId: artifact.id, sourceNodeIds: [nodeId], change: "parameters", instruction: describeEdit(edit), createdAt: now };
   return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId: artifact.id } : item)), artifacts: { ...state.artifacts, [artifact.id]: artifact }, revisions: { ...state.revisions, [revision.id]: revision } } };
 }
+
+// ---------------------------------------------------------------------------
+// Branching and lineage (P0.14)
+// ---------------------------------------------------------------------------
+
+export const branchLabel = (index: number) => `Branch ${String.fromCharCode(65 + (index % 26))}`;
+
+/** The nearest artifact feeding `nodeId` through its input chain (generation/variation snapshots). */
+export function upstreamArtifactId(graph: FlowGraph, nodeId: string): string | undefined {
+  const seen = new Set<string>();
+  let current = incoming(graph, nodeId)?.source;
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const node = graph.nodes.find((item) => item.id === current);
+    if (node?.artifactId) return node.artifactId;
+    current = incoming(graph, current)?.source;
+  }
+  return undefined;
+}
+
+/**
+ * Forks a design: adds a sibling Variation + Model lane after `sourceId`, wired from the same output, so both
+ * branches stay visible with the shared source as their common parent. Existing lanes are labelled A, B, …
+ */
+export function branchFrom(graph: FlowGraph, sourceId: string, ids: { variation: string; model: string; edgeA: string; edgeB: string }): Mutation<{ graph: FlowGraph; variationId: string }> {
+  const source = graph.nodes.find((node) => node.id === sourceId);
+  if (!source || (source.type !== "generation" && source.type !== "variation")) return { ok: false, message: "Branch from a Generation or Variation node." };
+  const siblings = graph.edges.filter((edge) => edge.source === sourceId).map((edge) => graph.nodes.find((node) => node.id === edge.target)).filter((node): node is DesignNode => node?.type === "variation");
+  const labelled = graph.nodes.map((node) => {
+    const index = siblings.findIndex((sibling) => sibling.id === node.id);
+    return index >= 0 && !node.params.label ? { ...node, params: { ...node.params, label: branchLabel(index) } } : node;
+  });
+  const lowest = Math.max(source.position.y, ...siblings.map((sibling) => sibling.position.y));
+  const added = addNode(addNode({ ...graph, nodes: labelled }, "variation", ids.variation, { x: source.position.x + 300, y: lowest + 230 }), "model", ids.model, { x: source.position.x + 600, y: lowest + 200 });
+  const withLabel = { ...added, nodes: added.nodes.map((node) => (node.id === ids.variation ? { ...node, params: { ...node.params, label: branchLabel(siblings.length) } } : node)) };
+  const first = connectNodes(withLabel, { source: sourceId, sourceHandle: "spec", target: ids.variation, targetHandle: "spec" }, ids.edgeA);
+  if (!first.ok) return first;
+  const second = connectNodes(first.graph, { source: ids.variation, sourceHandle: "spec", target: ids.model, targetHandle: "spec" }, ids.edgeB);
+  return second.ok ? { ok: true, graph: second.graph, variationId: ids.variation } : second;
+}
+
+const recipeKey = (node: DesignNode, parent: string | undefined) => JSON.stringify({ text: nodeText(node), edits: variationEdits(node), parent });
+
+/**
+ * Snapshots every Variation node whose recipe (follow-up text + parameter edits, over its current parent artifact)
+ * changed since its last snapshot: a new immutable artifact plus a revision from the parent artifact.
+ * Pass-through variations (no text, no edits) are not snapshotted.
+ */
+export function commitVariations(state: RunInput, newId: (prefix: string) => string, now: string): RunInput {
+  let next = state;
+  state.nodes.filter((node) => node.type === "variation").forEach((node) => {
+    const current = next.nodes.find((item) => item.id === node.id) as DesignNode;
+    const edits = variationEdits(current);
+    const text = nodeText(current);
+    if (!text && edits.length === 0) return;
+    const parent = upstreamArtifactId(next, node.id);
+    const key = recipeKey(current, parent);
+    if (current.artifactId && next.artifacts[current.artifactId]?.metadata.recipeKey === key) return;
+    const result = evaluateGraph(next, next.artifacts)[node.id];
+    if (!result || result.status === "blocked" || result.output.kind !== "spec" || !parent) return;
+    const artifactId = newId("artifact");
+    const artifact: Artifact = { id: artifactId, kind: "building-spec", sourceNodeId: node.id, createdAt: now, storageKey: `inline:${artifactId}`, metadata: { spec: result.output.spec, brief: result.output.brief, origin: "variation", recipeKey: key, parentArtifactId: parent } };
+    const revisionId = newId("rev");
+    const revision: DesignRevision = { id: revisionId, parentArtifactId: parent, childArtifactId: artifactId, sourceNodeIds: [node.id], change: text ? "prompt" : "parameters", instruction: [text, ...edits.map(describeEdit)].filter(Boolean).join("; ").slice(0, 800), createdAt: now };
+    next = { ...next, nodes: next.nodes.map((item) => (item.id === node.id ? { ...item, artifactId } : item)), artifacts: { ...next.artifacts, [artifactId]: artifact }, revisions: { ...next.revisions, [revisionId]: revision } };
+  });
+  return next;
+}
+
+export type LineageEntry = { artifactId: string; createdAt: string; origin: string; instruction: string; current: boolean };
+
+/** Root-to-leaf chain of artifacts ending at `artifactId`, following revisions back to the original generation. */
+export function lineageOf(revisions: Record<string, DesignRevision>, artifacts: Record<string, Artifact>, artifactId: string | undefined): LineageEntry[] {
+  const chain: LineageEntry[] = [];
+  const seen = new Set<string>();
+  let current = artifactId;
+  let instruction = "";
+  while (current && artifacts[current] && !seen.has(current)) {
+    seen.add(current);
+    const artifact = artifacts[current];
+    chain.unshift({ artifactId: current, createdAt: artifact.createdAt, origin: String(artifact.metadata.origin ?? "generation"), instruction, current: current === artifactId });
+    const revision = Object.values(revisions).find((item) => item.childArtifactId === current);
+    instruction = revision?.instruction ?? "";
+    current = revision?.parentArtifactId;
+  }
+  // instruction describes the step that *produced* each entry, so shift it down by one position.
+  return chain.map((entry, index) => ({ ...entry, instruction: index === 0 ? "Original generation" : Object.values(revisions).find((item) => item.childArtifactId === entry.artifactId)?.instruction ?? "" }));
+}
+
+/** Every artifact a node has produced, oldest first, with the instruction of the revision that created it. */
+export function versionsOf(state: Pick<RunInput, "artifacts" | "revisions">, nodeId: string, currentId?: string): LineageEntry[] {
+  return Object.values(state.artifacts)
+    .filter((artifact) => artifact.sourceNodeId === nodeId)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+    .map((artifact) => ({
+      artifactId: artifact.id,
+      createdAt: artifact.createdAt,
+      origin: String(artifact.metadata.origin ?? "generation"),
+      instruction: Object.values(state.revisions).find((revision) => revision.childArtifactId === artifact.id)?.instruction || "Original generation",
+      current: artifact.id === currentId,
+    }));
+}
+
+/** Points a Generation node at one of its own earlier artifacts (a pointer move; nothing is deleted). */
+export function restoreVersion(state: RunInput, nodeId: string, artifactId: string): Mutation<{ state: RunInput }> {
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.type !== "generation") return { ok: false, message: "Only Generation nodes can switch versions." };
+  if (state.artifacts[artifactId]?.sourceNodeId !== nodeId) return { ok: false, message: "That version was not produced by this node." };
+  return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId } : item)) } };
+}

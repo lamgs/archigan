@@ -16,6 +16,8 @@ export type StudioNodeData = {
   onText: (id: string, value: string) => void;
   onAdd: (sourceId: string, type: DesignNodeType) => void;
   onRun: (id: string) => void;
+  onBranch: (id: string) => void;
+  onCommit: () => void;
 } & Record<string, unknown>;
 
 export type StudioFlowNode = Node<StudioNodeData, "studio">;
@@ -36,7 +38,7 @@ export function StudioNode({ id, data, selected }: NodeProps<StudioFlowNode>) {
         <span>{EYEBROW[data.type]}</span>
         <em className={`status status--${data.status}`} title={data.message}>{STATUS_LABEL[data.status]}</em>
       </div>
-      <h3>{NODE_LABELS[data.type]}</h3>
+      <h3>{NODE_LABELS[data.type]}{typeof data.params.label === "string" && data.params.label ? <small className="node-label"> · {data.params.label}</small> : null}</h3>
       {editable ? (
         <textarea
           className="nodrag nowheel"
@@ -46,11 +48,13 @@ export function StudioNode({ id, data, selected }: NodeProps<StudioFlowNode>) {
           maxLength={data.type === "prompt" ? 800 : 400}
           placeholder={data.type === "prompt" ? "Describe the building, material, and organization…" : "Optional: terraces, twist, glass…"}
           onChange={(event) => data.onText(id, event.target.value)}
+          onBlur={data.onCommit}
         />
       ) : (
         <p>{data.status === "blocked" ? data.message : data.summary}</p>
       )}
       {data.type === "generation" && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Run again" : "Run"}</button>}
+      {selected && (data.type === "generation" || data.type === "variation") && data.status !== "blocked" && <button type="button" className="nodrag node-branch" onClick={() => data.onBranch(id)}>Branch ⑂</button>}
       {data.status === "stale" && <p className="node-note">The upstream prompt changed — run again to update.</p>}
       {selected && data.nextTypes.length > 0 && (
         <div className="node-next nodrag" role="group" aria-label="Add next node">
