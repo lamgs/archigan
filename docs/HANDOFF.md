@@ -2,6 +2,12 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — owner decision: multi-provider hosted generation (ADR-016)
+
+- Owner chose hosted AI generation with **Hunyuan3D (via fal.ai), Tripo, and Meshy**; Rodin rejected; local procedural remains the free default. Recorded as ADR-016; `TASKS.md` P1.02 rewritten with acceptance criteria; `STATUS.md` “Next action” now permits P1.02 only (E1–E4 still outstanding, P1.01/P1.03 still on hold).
+- No code changed in this entry. Pricing in ADR-016 comes from public pages/search snippets and is unverified; `docs.meshy.ai` was unreachable from this environment and fal/Tripo docs may be too — if so, record each as a blocker in `STATUS.md` and keep adapters lenient and labelled unverified.
+- Branch note: all work after PR #1 (P0.15–P0.21, gate review, handoff) lives only on `claude/determined-sagan-v8sy6v` and is not merged to `main`; new work should start from that branch's latest remote commit.
+
 ## 2026-10-09 — Claude — handoff: exceptions kept outstanding
 
 - Owner instruction: keep exceptions E1–E4 outstanding; hand off to another session. No code changed in this entry; the MVP is deliberately **not** declared complete and P1 has **not** started.

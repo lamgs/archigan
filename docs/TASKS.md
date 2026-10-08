@@ -36,7 +36,7 @@ Status legend: `[x]` complete, `[ ]` incomplete. P0 is required for the master-b
 ## P1 — Post-MVP capabilities
 
 - [ ] **P1.01 Supabase sync.** Add optional authenticated project/database and asset-storage sync without weakening local-first behavior.
-- [ ] **P1.02 Second hosted provider.** Add Tripo or equivalent behind the provider-neutral job/asset interface.
+- [ ] **P1.02 Multi-provider hosted generation (owner-approved 2026-10-09, see ADR-016).** Add Hunyuan3D (via fal.ai) and Tripo next to the existing Meshy adapter behind one provider-neutral server interface (create / status / cancel / model download), a provider registry, and a provider picker that shows each provider's configured/unverified state and approximate cost. Acceptance: each provider has a mocked documented-contract test suite (create, statuses, errors, rate limit, timeout, host-allowlisted download); all paid requests stay fail-closed behind the access code and an explicit confirmation naming the provider; existing projects (provider `meshy`/`procedural`) still open; keys never reach the client; every provider is reported **unverified** until a real-account smoke test is recorded. Does not close E1–E4.
 - [ ] **P1.03 GLB import.** Support tightly scoped user model/reference upload with validation and clear editing limits.
 - [ ] **P1.04 Advanced presentation.** Add richer materials, environments, side-by-side comparisons, and higher-quality rendering controls.
 - [ ] **P1.05 Observability and deployment.** Add opt-in privacy-preserving diagnostics plus deployment, rollback, and provider-cost runbooks.
