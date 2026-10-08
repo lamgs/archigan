@@ -116,7 +116,7 @@ export function projectSignature(p: Pick<SiftProjectV2, "name" | "viewport" | "s
     p.graph.nodes.map((n) => [n.id, n.type, round(n.position.x), round(n.position.y), n.params, n.artifactId ?? null]),
     p.graph.edges.map((e) => [e.id, e.source, e.sourcePort, e.target, e.targetPort]),
     Object.keys(p.artifacts).sort(),
-    Object.keys(p.jobs).sort(),
+    Object.values(p.jobs).map((j) => [j.id, j.status, j.resultArtifactId ?? null]).sort(),
     Object.keys(p.revisions).sort(),
   ]);
 }

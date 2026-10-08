@@ -13,6 +13,16 @@
 - Observed 2026-10-08: hostname responds with a `302` redirect to Vercel SSO/Deployment Protection.
 - Deployment metadata and authenticated application smoke test remain unverified because this session lacks `booth-os` connector/CLI authorization. See `DEPLOYMENT.md`.
 
+## Blockers and unverified items
+
+Record anything that stops or limits work here (with the date and what would unblock it). Remove an entry only when it is resolved.
+
+| Date | Blocker | Effect | What would unblock it |
+| --- | --- | --- | --- |
+| 2026-10-09 | `docs.meshy.ai` is blocked by the agent network proxy (WebFetch `EGRESS_BLOCKED`); only search snippets were readable. | The Meshy adapter follows the publicly documented contract as summarized by search (statuses, endpoints, DELETE 409 on running tasks); exact response field names (`model_urls`, `task_error`, `expires_at`) are unconfirmed, so parsing is lenient and everything is labelled **unverified**. | Allow `docs.meshy.ai` through the proxy, or paste the Text-to-3D reference; or run one real task and compare the JSON. |
+| 2026-10-09 | No Meshy API key/account in this environment. | No live hosted call has ever been made. Only mocked documented-contract tests exist; `verified` is hard-wired `false`. | A paid Meshy key set as `MESHY_API_KEY` (+ `MESHY_ENABLED=true`, `MESHY_ACCESS_CODE`) in a trusted environment, then the manual smoke test in `DEPLOYMENT.md`. |
+| 2026-10-09 | `vercel.com` / `api.vercel.com` are unreachable and no Vercel token is available. | Build logs and the deployed app (behind Deployment Protection) cannot be inspected by the agent; deploy health is inferred from GitHub commit statuses only. | An authorized Vercel identity (`vercel inspect <id> --logs`), or the user pasting logs/errors. |
+
 ## Working now
 
 - Canonical v2 contracts (`BuildingSpec`, `Artifact`, `GenerationJob`, `DesignNode`/ports, `DesignRevision`, `SiftProjectV2`), graph connection/cycle validation, and a lossless v1→v2 migration. Storage writes v2 (`projects-v2`), reads legacy `projects-v1` read-only, preserves unreadable records, and saves in one atomic transaction.
@@ -24,6 +34,7 @@
 - Expanded viewer: focus mode, bounds-based framing, five camera presets (three true orthographic), display modes, grid/axes/shadow toggles, keyboard orbit/zoom/frame; browser-verified, including that drags/wheel inside the viewer (inline and focus) never move the outer canvas.
 - Render pipeline: Render nodes render offscreen at exact pixel sizes, persist PNG assets outside the project record, track freshness, offer download/preview in the inspector; deleting a project deletes its render assets.
 - Persistence: everything (graph, viewport, prompts, artifacts/specs, revisions, jobs, project + viewer settings, render PNG assets) is stored in browser IndexedDB only; autosave with a visible Saved/Unsaved/Saving/error badge; verified by a full-board restore test and a browser refresh test. Data is local to each browser profile and origin (no cloud sync until P1.01).
+- Hosted (Meshy) lifecycle — **unverified against a live account**: fail-closed paid-request guard, confirmation dialog naming Meshy, create/poll/cancel with normalized states, reload-resume (re-enter access code), GLB ingestion into IndexedDB, hosted model viewing/download. Verified only with mocked contract tests and a browser run against a mocked API.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -34,7 +45,7 @@
 
 ## Known limitations
 
-- Meshy has not been called with a real account; status must remain “unverified.”
+- Meshy has not been called with a real account; status must remain “unverified.” Hosted results are fixed meshes (not editable); variation/render nodes need the Local provider’s parametric spec. The access code is held in memory only, so after a reload it must be re-entered to resume polling. Rate limits are per server instance (in-memory).
 - Render nodes have no behavior until P0.16; `/api/generate` still returns legacy `MassingSpec` and is unused by the UI; variation nodes derive their spec live (snapshotted for lineage only) (not yet persisted as child artifacts — P0.14).
 - Storage logic is covered via pure functions (`reconcileStores`); IndexedDB itself is not exercised by automated tests (no fake-indexeddb yet).
 - Variation output is derived live from prompt+refinement (not persisted as an artifact, not directly parameter-editable until P0.13/P0.14). Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is now unused.
@@ -49,7 +60,7 @@
 
 ## Verification
 
-- `npm run test`: passed, 11 files / 103 tests.
+- `npm run test`: passed, 15 files / 153 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -57,5 +68,5 @@
 
 ## Next action
 
-Implement P0.18 (Meshy async lifecycle: protected paid-request confirmation, create/status/poll/cancel, normalized job states, reload-safe jobs, GLB ingestion, signed-URL expiry, mocked contract tests; real-key result recorded separately as verified/unverified), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement P0.19 (robust states and performance: WebGL error boundary/unsupported-WebGL fallback, mesh limits/throttling, persistence-failure and recovery UI, GPU cleanup verification), then P0.20 (Playwright acceptance automation for the ten PRD scenarios), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 

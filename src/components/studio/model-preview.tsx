@@ -2,13 +2,16 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MathUtils, OrthographicCamera, PerspectiveCamera, Spherical, Vector3, type Group } from "three";
+import { Box3, MathUtils, Object3D, OrthographicCamera, PerspectiveCamera, Spherical, Vector3, type Group } from "three";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
 import type { BuildingSpec, Provider, ViewerSettings } from "@/lib/contracts";
 import { computeLayout } from "@/lib/geometry";
 import { buildBuildingGroup, disposeBuildingGroup } from "@/lib/three-building";
 import { describeSpec } from "@/lib/typologies";
-import { CAMERA_PRESETS, DEFAULT_VIEWER_SETTINGS, MODE_LABELS, PERSPECTIVE_FOV, PRESET_LABELS, VIEW_MODES, presetPose, sceneMetrics, type CameraPreset, type SceneMetrics, type ViewMode } from "@/lib/viewer";
+import { CAMERA_PRESETS, DEFAULT_VIEWER_SETTINGS, MODE_LABELS, PERSPECTIVE_FOV, PRESET_LABELS, VIEW_MODES, metricsFromSize, presetPose, sceneMetrics, type CameraPreset, type SceneMetrics, type ViewMode } from "@/lib/viewer";
+
+export type HostedPreview = { blob: Blob; label: string };
+type LoadedHosted = { blob: Blob; object: Object3D; metrics: SceneMetrics };
 
 type RigHandle = { frame: () => void; orbit: (azimuth: number, polar: number) => void; zoom: (factor: number) => void };
 
@@ -143,7 +146,7 @@ function Toggle({ label, pressed, onChange, shortcut }: { label: string; pressed
   return <button type="button" aria-pressed={pressed} aria-keyshortcuts={shortcut} className="viewer-toggle" onClick={() => onChange(!pressed)}>{label}</button>;
 }
 
-export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT_VIEWER_SETTINGS, onSettings }: { spec: BuildingSpec; provider: Provider; stale?: boolean; settings?: ViewerSettings; onSettings?: (settings: ViewerSettings) => void }) {
+export function ModelPreview({ spec, hosted, provider, stale = false, settings = DEFAULT_VIEWER_SETTINGS, onSettings }: { spec?: BuildingSpec; hosted?: HostedPreview; provider: Provider; stale?: boolean; settings?: ViewerSettings; onSettings?: (settings: ViewerSettings) => void }) {
   const canvasWrap = useRef<HTMLDivElement>(null);
   const focusButton = useRef<HTMLButtonElement>(null);
   const rig = useRef<RigHandle | null>(null);
@@ -158,9 +161,38 @@ export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT
   const [focus, setFocus] = useState(false);
   const [frameToken, setFrameToken] = useState(0);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "complete" | "error">("idle");
-  const summary = useMemo(() => describeSpec(spec), [spec]);
-  const layout = useMemo(() => computeLayout(spec), [spec]);
-  const metrics = useMemo(() => sceneMetrics(layout), [layout]);
+  const [loaded, setLoaded] = useState<LoadedHosted | null>(null);
+  const [hostedError, setHostedError] = useState<string | null>(null);
+  const hostedBlob = hosted?.blob;
+  useEffect(() => {
+    if (!hostedBlob) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+        const gltf = await new GLTFLoader().parseAsync(await hostedBlob.arrayBuffer(), "");
+        if (cancelled) return;
+        const box = new Box3().setFromObject(gltf.scene);
+        const raw = box.getSize(new Vector3());
+        if (!Number.isFinite(raw.x + raw.y + raw.z) || raw.x + raw.y + raw.z === 0) throw new Error("empty");
+        const metrics = metricsFromSize([raw.x, raw.y, raw.z]);
+        const holder = new Object3D();
+        gltf.scene.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+        holder.add(gltf.scene);
+        holder.scale.setScalar(metrics.scale);
+        setLoaded({ blob: hostedBlob, object: holder, metrics });
+        setHostedError(null);
+      } catch {
+        if (!cancelled) { setLoaded(null); setHostedError("The hosted model could not be displayed."); }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [hostedBlob]);
+  const hostedReady = hostedBlob && loaded?.blob === hostedBlob ? loaded : null;
+  const showHosted = Boolean(hostedBlob);
+  const summary = useMemo(() => (spec ? describeSpec(spec) : { levels: 0, volumes: 0, footprint: "" }), [spec]);
+  const layout = useMemo(() => (spec ? computeLayout(spec) : { slabs: [], bounds: { min: [0, 0, 0] as [number, number, number], max: [1, 1, 1] as [number, number, number] }, floors: 0, warnings: [] as string[] }), [spec]);
+  const metrics = useMemo(() => (showHosted ? hostedReady?.metrics ?? metricsFromSize([1, 1, 1]) : sceneMetrics(layout)), [showHosted, hostedReady, layout]);
 
   const closeFocus = useCallback(() => { setFocus(false); focusButton.current?.focus(); }, []);
   useEffect(() => {
@@ -178,6 +210,8 @@ export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT
   };
 
   const exportGlb = async () => {
+    if (hosted) { download(hosted.blob, "sift-hosted-model.glb"); setExportState("complete"); return; }
+    if (!spec) return;
     setExportState("exporting");
     const group: Group = buildBuildingGroup(spec); // always the shaded model, independent of the viewer mode
     try {
@@ -217,7 +251,7 @@ export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT
           {CAMERA_PRESETS.map((item) => <button type="button" key={item} aria-pressed={preset === item} onClick={() => setPreset(item)}>{PRESET_LABELS[item]}</button>)}
         </div>
         <div className="viewer-bar__group" role="group" aria-label="Display mode">
-          {VIEW_MODES.map((item) => <button type="button" key={item} aria-pressed={mode === item} onClick={() => setMode(item)}>{MODE_LABELS[item]}</button>)}
+          {VIEW_MODES.map((item) => <button type="button" key={item} aria-pressed={mode === item} disabled={showHosted && item !== "shaded"} title={showHosted && item !== "shaded" ? "Display modes apply to procedural models only" : undefined} onClick={() => setMode(item)}>{MODE_LABELS[item]}</button>)}
         </div>
         <div className="viewer-bar__group" role="group" aria-label="Scene helpers">
           <Toggle label="Grid" pressed={grid} onChange={setGrid} />
@@ -232,13 +266,13 @@ export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT
           <fog attach="fog" args={["#d9d3c6", 70, 160]} />
           <ambientLight intensity={mode === "wireframe" ? 0.4 : 1.1} />
           <directionalLight position={[18, 34, 20]} intensity={2.2} castShadow={shadows} shadow-mapSize={[2048, 2048]} shadow-camera-left={-34} shadow-camera-right={34} shadow-camera-top={34} shadow-camera-bottom={-34} shadow-camera-near={1} shadow-camera-far={120} shadow-bias={-0.0004} />
-          <Model spec={spec} mode={mode} />
+          {showHosted ? hostedReady && <primitive object={hostedReady.object} /> : spec && <Model spec={spec} mode={mode} />}
           {grid && <gridHelper args={[100, 40, "#aaa396", "#c7c1b4"]} position={[0, -0.51, 0]} />}
           {axes && <axesHelper args={[Math.max(10, metrics.size[0])]} position={[-metrics.size[0] / 2 - 2, 0, metrics.size[2] / 2 + 2]} />}
           <CameraRig preset={preset} metrics={metrics} frameToken={frameToken} onRig={onRig} />
         </Canvas>
         <div className="preview-panel__caption">
-          <span>{summary.levels} levels</span><span>{summary.volumes} {summary.volumes === 1 ? "volume" : "volumes"}</span><span>{summary.footprint}</span>
+          {showHosted ? <><span>{hosted?.label}</span><span>not editable</span><span>unverified</span></> : <><span>{summary.levels} levels</span><span>{summary.volumes} {summary.volumes === 1 ? "volume" : "volumes"}</span><span>{summary.footprint}</span></>}
         </div>
         <p className="viewer-hint" aria-hidden="true">Drag orbit · right-drag pan · wheel zoom · arrows/+/−/F by keyboard</p>
       </div>
@@ -251,6 +285,8 @@ export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT
           {exportState === "exporting" ? "Exporting…" : exportState === "complete" ? "GLB saved" : exportState === "error" ? "Retry GLB" : "GLB"}
         </button>
       </div>
+      {hostedError && <p className="preview-panel__note" role="alert">{hostedError}</p>}
+      {showHosted && <p className="preview-panel__note">Hosted Meshy mesh — a fixed model, not editable geometry. Hosted generation is unverified against a live account.</p>}
       {stale && <p className="preview-panel__note" role="status">Showing the last generated model — the prompt has changed since. Run the Generation node again.</p>}
       {layout.warnings.length > 0 && <p className="preview-panel__note" role="status">{layout.warnings[0]}</p>}
       <p className="preview-panel__note">Concept massing only — not BIM, engineering, or construction geometry.</p>

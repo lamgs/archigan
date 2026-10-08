@@ -3,11 +3,13 @@
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge, type Viewport } from "@xyflow/react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DesignEdge, DesignNode, DesignNodeType, Provider, SiftProjectV2, ViewerSettings } from "@/lib/contracts";
+import type { DesignEdge, DesignNode, DesignNodeType, GenerationJob as GenerationJobT, Provider, SiftProjectV2, ViewerSettings } from "@/lib/contracts";
 import { DEFAULT_VIEWER_SETTINGS } from "@/lib/viewer";
 import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, projectSignature, renameProject, validateProjectName } from "@/lib/projects";
 import { sampleProjects } from "@/lib/samples";
+import { applyTaskUpdate, buildHostedArtifact, completeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
+import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTask } from "@/lib/hosted-client";
 import { probeGpu, renderPng } from "@/lib/render-image";
 import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
 import { deleteProject, listProjects, loadAsset, saveAsset, saveProject } from "@/lib/storage";
@@ -15,6 +17,7 @@ import type { SpecEdit } from "@/lib/spec-edit";
 import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, recordRender, restoreVersion, runGeneration, versionsOf, type FlowGraph } from "@/lib/workflow";
 import { Dashboard } from "./dashboard";
 import { Inspector } from "./inspector";
+import { PaidConfirm } from "./paid-confirm";
 import { StudioNode, type StudioFlowNode } from "./studio-node";
 
 const nodeTypes = { studio: StudioNode };
@@ -56,6 +59,13 @@ function Studio() {
   const [renderError, setRenderError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const counter = useRef(0);
+  const [accessCode, setAccessCode] = useState("");
+  const [confirm, setConfirm] = useState<{ nodeId: string; prompt: string } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [hostedError, setHostedError] = useState<string | null>(null);
+  const [cancelNotice, setCancelNotice] = useState(false);
+  const [hostedBlob, setHostedBlob] = useState<Blob | null>(null);
   const [savedSig, setSavedSig] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -76,7 +86,7 @@ function Studio() {
   const preview = useMemo(() => previewSpec(results, graph, selectedId), [results, graph, selectedId]);
   const blank = graph.nodes.filter((node) => node.type === "prompt").every((node) => !String(node.params.text ?? "").trim());
 
-  const uid = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}-${(counter.current += 1)}`;
+  const uid = useCallback((prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}-${(counter.current += 1)}`, []);
   const setParam = useCallback((id: string, value: string) => setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, params: { ...node.data.params, text: value } } } : node))), [setNodes]);
 
   const buildProject = (base: Meta, g: FlowGraph, viewport: Viewport = base.viewport): SiftProjectV2 => ({ schemaVersion: 2, ...base, viewport, updatedAt: new Date().toISOString(), graph: g });
@@ -159,8 +169,104 @@ function Studio() {
     setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, params: { ...node.data.params, [key]: value } } } : node)));
   };
 
+  // ---- Hosted (Meshy) generation: explicit confirmation → create → poll → ingest GLB → persist -------------------------
+  const patchJob = useCallback((jobId: string, change: (job: GenerationJobT) => GenerationJobT) => setMeta((current) => (current.jobs[jobId] ? { ...current, jobs: { ...current.jobs, [jobId]: change(current.jobs[jobId]) } } : current)), []);
+
+  const startHosted = (nodeId: string) => {
+    const source = graph.edges.find((edge) => edge.target === nodeId);
+    const prompt = String(graph.nodes.find((node) => node.id === source?.source)?.params.text ?? "").trim();
+    if (!prompt) return setNotice("Connect a Prompt node with a brief before generating.");
+    if (!meshyConfigured) return setNotice("Hosted generation is not configured on this deployment. Use the Local provider.");
+    setConfirmError(null);
+    setConfirm({ nodeId, prompt });
+  };
+
+  const confirmSpend = async () => {
+    if (!confirm) return;
+    setConfirmBusy(true);
+    setConfirmError(null);
+    const created = await createHostedTask({ prompt: confirm.prompt, refinement: "", code: accessCode.trim() });
+    setConfirmBusy(false);
+    if (!created.ok) return setConfirmError(created.error.message);
+    const job = newHostedJob({ id: uid("job"), nodeId: confirm.nodeId, taskId: created.value.taskId, now: new Date().toISOString() });
+    const next = { ...meta, jobs: { ...meta.jobs, [job.id]: job } };
+    setMeta(next);
+    setConfirm(null);
+    setHostedError(null);
+    setCancelNotice(false);
+    setNotice("Meshy task started. You can keep working; progress is shown in the inspector.");
+    void persist(next); // record the task id immediately so a reload cannot lose a paid task
+  };
+
+  const cancelJob = async () => {
+    const job = latestJob;
+    if (!job) return;
+    const now = new Date().toISOString();
+    if (job.status === "queued" && job.providerTaskId && accessCode) {
+      const result = await cancelHostedTask(job.providerTaskId, accessCode.trim());
+      if (!result.ok && result.error.code !== "running") return setHostedError(result.error.message);
+      setCancelNotice(!result.ok);
+    } else setCancelNotice(true);
+    patchJob(job.id, (current) => userCancel(current, now));
+  };
+
+  const downloadHosted = () => {
+    if (!hostedBlob) return;
+    const url = URL.createObjectURL(hostedBlob);
+    const anchor = Object.assign(document.createElement("a"), { href: url, download: "sift-hosted-model.glb" });
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const jobsRef = useRef(meta.jobs);
+  useEffect(() => { jobsRef.current = meta.jobs; });
+  const activeJobKey = view === "studio" ? Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job)).map((job) => job.id).join(",") : "";
+  useEffect(() => {
+    const code = accessCode.trim();
+    if (!activeJobKey || !code) return;
+    let cancelled = false;
+    const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+    const loop = async (jobId: string) => {
+      let attempt = 0;
+      let ingestTries = 0;
+      while (!cancelled) {
+        const job = jobsRef.current[jobId];
+        if (!job || !isActiveJob(job) || !job.providerTaskId) return;
+        const stale = timeoutIfStale(job, Date.now());
+        if (stale !== job) return patchJob(jobId, () => stale);
+        const status = await fetchHostedTask(job.providerTaskId, code);
+        if (cancelled) return;
+        const now = new Date().toISOString();
+        let delay = nextPollDelayMs(attempt++);
+        if (!status.ok) {
+          const { error } = status;
+          if (error.code === "rate-limited") { patchJob(jobId, (current) => markRateLimited(current, now)); delay = nextPollDelayMs(attempt, error.retryAfterSeconds ?? 10); }
+          else if (!error.retryable) return patchJob(jobId, (current) => failJob(current, { code: error.code, message: error.message, retryable: false }, now));
+        } else if (status.value.status === "completed") {
+          const model = await downloadHostedModel(job.providerTaskId, code);
+          if (cancelled) return;
+          if (model.ok) {
+            const artifact = buildHostedArtifact({ artifactId: uid("hosted"), job, bytes: model.value.size, now });
+            await saveAsset(artifact.storageKey, model.value);
+            if (cancelled || !isActiveJob(jobsRef.current[jobId] ?? { status: "cancelled" })) return;
+            setMeta((current) => ({ ...current, artifacts: { ...current.artifacts, [artifact.id]: artifact }, jobs: { ...current.jobs, [jobId]: completeJob(current.jobs[jobId], artifact.id, now) } }));
+            setNodes((current) => current.map((node) => (node.id === job.nodeId ? { ...node, data: { ...node.data, params: { ...node.data.params, hostedArtifactId: artifact.id } } } : node)));
+            setNotice("Hosted model downloaded and saved in this browser.");
+            return;
+          }
+          if (model.error.retryable && (ingestTries += 1) < 4) delay = 4000 * ingestTries;
+          else return patchJob(jobId, (current) => failJob(current, { code: model.error.code, message: model.error.message, retryable: false }, now));
+        } else patchJob(jobId, (current) => applyTaskUpdate(current, status.value, now));
+        await sleep(delay);
+      }
+    };
+    activeJobKey.split(",").forEach((id) => void loop(id));
+    return () => { cancelled = true; };
+  }, [activeJobKey, accessCode, patchJob, uid, setNodes]);
+
   const run = (id: string) => {
     if (graph.nodes.find((node) => node.id === id)?.type === "render") return void renderNode(id);
+    if (meta.settings.provider === "meshy" && graph.nodes.find((node) => node.id === id)?.type === "generation") return startHosted(id);
     const result = runGeneration({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, id, meta.settings.provider, { artifact: uid("artifact"), job: uid("job"), revision: uid("rev") }, new Date().toISOString());
     if (!result.ok) return setNotice(result.message);
     const next = { ...meta, artifacts: result.state.artifacts, jobs: result.state.jobs, revisions: result.state.revisions };
@@ -199,6 +305,26 @@ function Studio() {
     imageUrl,
     imageInfo: selectedRenderArtifact ? `${selectedRenderArtifact.metadata.width}×${selectedRenderArtifact.metadata.height} PNG · ${Math.round(Number(selectedRenderArtifact.metadata.bytes ?? 0) / 1024)} KB` : null,
     fresh: selectedResult?.status === "ready",
+  };
+
+  const latestJob = selectedNode?.type === "generation"
+    ? Object.values(meta.jobs).filter((job) => job.nodeId === selectedNode.id && isHostedJob(job)).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0]
+    : undefined;
+  const hostedArtifact = selectedNode?.type === "generation" && typeof selectedNode.params.hostedArtifactId === "string" ? meta.artifacts[selectedNode.params.hostedArtifactId] : undefined;
+  const hostedKey = meta.settings.provider === "meshy" ? hostedArtifact?.storageKey : undefined;
+  useEffect(() => {
+    let cancelled = false;
+    if (hostedKey) void loadAsset(hostedKey).then((blob) => !cancelled && setHostedBlob(blob)).catch(() => !cancelled && setHostedBlob(null));
+    else queueMicrotask(() => !cancelled && setHostedBlob(null));
+    return () => { cancelled = true; };
+  }, [hostedKey]);
+  const hostedState = {
+    configured: meshyConfigured,
+    accessCode,
+    job: latestJob,
+    error: hostedError,
+    modelInfo: hostedArtifact ? `${Math.round(Number(hostedArtifact.metadata.bytes ?? 0) / 1024)} KB` : null,
+    cannotCancelNotice: cancelNotice && latestJob?.status === "cancelled",
   };
 
   const editGeometry = (edit: SpecEdit) => {
@@ -348,7 +474,7 @@ function Studio() {
 
   const setProvider = (provider: Provider) => {
     setMeta((current) => ({ ...current, settings: { ...current.settings, provider } }));
-    if (provider === "meshy") setNotice(meshyConfigured ? "Meshy is configured but live credit-spending calls remain disabled in this slice." : "Add the server-only Meshy key to enable hosted generation later.");
+    if (provider === "meshy") setNotice(meshyConfigured ? "Meshy is a paid provider: you will be asked to confirm before any credits are spent." : "Hosted generation is not configured on this deployment; the Local provider keeps working.");
   };
   const provider = meta.settings.provider;
   const saveLabel = view !== "studio" ? { state: "idle", text: "" }
@@ -412,17 +538,22 @@ function Studio() {
               canRender={Boolean(selectedSpec)}
               onRenderSetting={setRenderSetting}
               onRender={() => void renderNode(selectedId ?? "")}
+              hosted={hostedState}
+              onAccessCode={setAccessCode}
+              onCancelJob={() => void cancelJob()}
+              onDownloadHosted={downloadHosted}
             />
             {blank && <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>}
           </section>
 
-          {preview ? (
-            <ModelPreview spec={preview.spec} provider={provider} stale={preview.stale} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
+          {preview || hostedBlob ? (
+            <ModelPreview spec={hostedBlob ? undefined : preview?.spec} hosted={hostedBlob ? { blob: hostedBlob, label: "Meshy GLB" } : undefined} provider={provider} stale={!hostedBlob && Boolean(preview?.stale)} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
           ) : (
             <aside className="preview-panel preview-panel--loading" aria-label="3D study preview"><p>No model yet. Write a brief, connect it to a Generation node, and press Run.</p></aside>
           )}
         </section>
       )}
+      {confirm && <PaidConfirm prompt={confirm.prompt} accessCode={accessCode} onAccessCode={setAccessCode} busy={confirmBusy} error={confirmError} onConfirm={() => void confirmSpend()} onCancel={() => setConfirm(null)} />}
     </main>
   );
 }

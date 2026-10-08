@@ -2,6 +2,19 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.18 Meshy async lifecycle (unverified live)
+
+- Server: rewrote `providers/meshy.ts` (lenient normalization, error mapping, timeouts, allowlisted size-capped GLB download), added `providers/guard.ts` (fail-closed config, access code, per-IP + daily limiter) and `hosted-http.ts`; routes `POST /api/generate`, `GET|DELETE /api/generate/[taskId]`, `GET .../model`; `/api/providers` now also reports `accessCodeRequired`.
+- Client: `hosted.ts` (pure job state machine, timeouts, backoff), `hosted-client.ts`, `paid-confirm.tsx` (explicit confirmation naming Meshy), inspector Hosted section, polling/ingest/cancel/resume in the shell, hosted GLB viewing in `model-preview.tsx` (GLTFLoader) and download. Jobs persist immediately on creation; schema gained optional `createdAt/updatedAt/outputExpiresAt` on jobs.
+- Checks: test 153/153 (mocked contract + state tests), lint clean, build passes. Playwright against a **mocked** `/api/generate` verified: dialog before any request, 402 error, queued cancel, immediate job persistence, progress + 429 retry, reload-resume after re-entering the code, ingestion, viewing, reload restore.
+- BLOCKERS (also in STATUS): `docs.meshy.ai` blocked by proxy (response field names unconfirmed), no Meshy key (no live call ever made), no Vercel log access. Manual smoke-test checklist added to `DEPLOYMENT.md`.
+- Open risks: rate limits are per-instance; hosted meshes are not editable and cannot feed variation/render nodes; access code must be re-entered after reload; SSE streaming not implemented (polling only).
+- Next: P0.19 robust states and performance.
+
+## 2026-10-09 — Claude — blockers recorded
+
+- Per the user’s instruction, blockers are now tracked in `docs/STATUS.md` → “Blockers and unverified items” (Meshy docs unreachable, no Meshy key, no Vercel access). Append new ones there and mention them in the handoff entry.
+
 ## 2026-10-09 — Claude — P0.17 complete persistence
 
 - Added autosave (debounce + visibilitychange/pagehide flush + flush before navigating away), `projectSignature` change detection, save badge, persisted `settings.viewer` (optional in schema), controlled `ModelPreview` settings. Fixed a real race where an in-flight save’s `setMeta` rolled back newer edits (found by Playwright): saves now merge only name/updatedAt/artifacts/revisions.

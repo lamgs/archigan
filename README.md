@@ -26,7 +26,7 @@ Project coordination lives in [`AGENTS.md`](./AGENTS.md), with current state in 
 
 ## Optional Meshy provider
 
-Meshy integration is server-side and off by default. Copy `.env.example` to `.env.local`, set `MESHY_ENABLED=true`, and add a server-only `MESHY_API_KEY`. Never expose the key with a `NEXT_PUBLIC_` prefix. The current adapter is intentionally reported as **unverified** until a real account smoke test succeeds.
+Meshy integration is server-side and off by default. Copy `.env.example` to `.env.local`, set `MESHY_ENABLED=true`, add a server-only `MESHY_API_KEY`, and set a `MESHY_ACCESS_CODE` (hosted generation stays disabled without all three; users must type the code and confirm before any credits are spent). Never expose the key with a `NEXT_PUBLIC_` prefix. The current adapter is intentionally reported as **unverified** until a real account smoke test succeeds.
 
 ## Legacy research prototype
 

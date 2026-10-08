@@ -135,6 +135,11 @@ export const generationJobSchema = z.object({
   outputUrl: z.string().url().optional(),
   error: z.object({ code: z.string(), message: z.string(), retryable: z.boolean() }).optional(),
   resultArtifactId: id.optional(),
+  /** Execution timestamps; optional so jobs saved before P0.18 still validate. */
+  createdAt: isoDate.optional(),
+  updatedAt: isoDate.optional(),
+  /** When the provider says its signed output URL / retained result expires, if known. */
+  outputExpiresAt: isoDate.optional(),
 });
 export type GenerationJob = z.infer<typeof generationJobSchema>;
 
@@ -219,5 +224,7 @@ export const generateRequestSchema = z.object({
   prompt: z.string().trim().min(3).max(800),
   refinement: z.string().trim().max(400).default(""),
   provider: providerSchema,
+  /** Must be literally `true` for paid (hosted) providers; the UI sets it only after the user confirms. */
+  confirmSpend: z.boolean().optional(),
 });
 

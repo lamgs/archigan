@@ -77,6 +77,7 @@ export function evaluateGraph(graph: FlowGraph, artifacts: Record<string, Artifa
     if (node.type === "generation") {
       if (input.output.kind !== "prompt") return { status: "blocked", message: "Generation needs a prompt." };
       const artifact = node.artifactId ? artifacts[node.artifactId] : undefined;
+      if (!artifact && node.params.hostedArtifactId) return { status: "blocked", message: "A hosted model exists, but it has no editable geometry. Switch the provider to Local and Run for a parametric design." };
       if (!artifact) return { status: "blocked", message: "Not generated yet — press Run." };
       const parsedSpec = buildingSpecSchema.safeParse(artifact.metadata.spec);
       const brief = artifact.metadata.brief as Brief | undefined;

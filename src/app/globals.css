@@ -251,3 +251,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .save-badge[data-state="dirty"], .save-badge[data-state="saving"] { background: #f3dfb8; color: #8a5a10; }
 .save-badge[data-state="error"] { background: #f3d9d4; color: var(--accent); }
 .save-badge[data-state="idle"]:empty { display: none; }
+
+.modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(36,35,33,.55); backdrop-filter: blur(3px); }
+.modal { width: min(460px, calc(100vw - 32px)); padding: 22px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); display: grid; gap: 10px; }
+.modal h2 { margin: 0; font: 400 24px Georgia, serif; }
+.modal p { margin: 0; font-size: 12px; line-height: 1.55; }
+.modal blockquote { margin: 0; padding: 8px 10px; border-left: 2px solid var(--accent); background: rgba(255,255,255,.55); font-size: 12px; max-height: 96px; overflow: auto; }
+.modal__fine { color: var(--muted); font-size: 11px !important; }
+.modal__actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+.modal__go { flex-direction: row; min-height: 0; padding: 10px 16px; }
+.modal__go span { font-size: 14px; }
+.field--stack { grid-template-columns: 1fr; }
+.progress { height: 6px; background: #e4dfd2; border-radius: 3px; overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); transition: width .4s; }

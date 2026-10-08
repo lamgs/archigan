@@ -27,6 +27,13 @@ export function sceneMetrics(layout: Pick<Layout, "bounds">): SceneMetrics {
   return { scale, size, center: [0, layout.bounds.min[1] * scale + size[1] / 2, 0], radius };
 }
 
+/** Metrics for an arbitrary mesh given its raw bounding-box size; the mesh is scaled to TARGET_SIZE and rests on y = 0. */
+export function metricsFromSize(rawSize: [number, number, number]): SceneMetrics {
+  const scale = TARGET_SIZE / Math.max(1e-6, ...rawSize);
+  const size = rawSize.map((value) => value * scale) as [number, number, number];
+  return { scale, size, center: [0, size[1] / 2, 0], radius: Math.max(0.5, Math.hypot(...size) / 2) };
+}
+
 /** Distance at which a sphere of `radius` fits inside a perspective frustum (limited by the narrower axis). */
 export function framingDistance(radius: number, fovDegrees: number, aspect: number, margin = 1.15) {
   const vertical = (fovDegrees * Math.PI) / 180;

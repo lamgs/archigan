@@ -5,6 +5,8 @@ import type { BuildingSpec, DesignNode, Provider } from "@/lib/contracts";
 import { BACKGROUNDS, LIGHTING, RESOLUTIONS, type RenderSettings, type ResolutionId } from "@/lib/render-settings";
 import { LIMITS, type SpecEdit } from "@/lib/spec-edit";
 import { CAMERA_PRESETS, MODE_LABELS, PRESET_LABELS, VIEW_MODES } from "@/lib/viewer";
+import type { GenerationJob } from "@/lib/contracts";
+import { describeJob, isActiveJob } from "@/lib/hosted";
 import { NODE_LABELS, type LineageEntry } from "@/lib/workflow";
 
 type Limit = { min: number; max: number; step: number };
@@ -141,6 +143,40 @@ function RenderPanel({ state, canRender, onSetting, onRender }: { state: RenderP
   );
 }
 
+export type HostedPanelState = {
+  configured: boolean;
+  accessCode: string;
+  job?: GenerationJob;
+  error: string | null;
+  modelInfo: string | null;
+  cannotCancelNotice: boolean;
+};
+
+function HostedSection({ state, onAccessCode, onCancel, onDownload }: { state: HostedPanelState; onAccessCode: (value: string) => void; onCancel: () => void; onDownload: () => void }) {
+  const { job } = state;
+  const active = job ? isActiveJob(job) : false;
+  return (
+    <fieldset>
+      <legend>Hosted job · Meshy (unverified)</legend>
+      {!state.configured && <p className="inspector__hint">Hosted generation is disabled on this deployment. Set <code>MESHY_ENABLED</code>, <code>MESHY_API_KEY</code> and <code>MESHY_ACCESS_CODE</code> on the server to enable it; the local procedural provider keeps working.</p>}
+      {state.configured && (
+        <label className="field field--stack"><span>Access code (memory only)</span><input type="password" autoComplete="off" value={state.accessCode} onChange={(event) => onAccessCode(event.target.value)} /></label>
+      )}
+      {job && (
+        <>
+          <p className="inspector__hint" role="status">{describeJob(job)}</p>
+          {active && <div className="progress" role="progressbar" aria-valuenow={job.progress ?? 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${job.progress ?? 0}%` }} /></div>}
+          {active && !state.accessCode && <p className="inspector__hint">Enter the access code to resume checking this task after a reload.</p>}
+          {active && <button type="button" className="ghost-button" onClick={onCancel}>{job.status === "queued" ? "Cancel task" : "Stop waiting"}</button>}
+          {state.cannotCancelNotice && <p className="inspector__hint">Meshy cannot cancel a task that is already running, so this app stopped waiting; the credits for it may still be spent.</p>}
+        </>
+      )}
+      {state.error && <p role="alert" className="inspector__error">{state.error}</p>}
+      {state.modelInfo && <button type="button" className="ghost-button" onClick={onDownload}>Download GLB · {state.modelInfo}</button>}
+    </fieldset>
+  );
+}
+
 type Props = {
   node?: DesignNode;
   spec?: BuildingSpec;
@@ -160,9 +196,13 @@ type Props = {
   canRender: boolean;
   onRenderSetting: (key: keyof RenderSettings, value: string) => void;
   onRender: () => void;
+  hosted: HostedPanelState;
+  onAccessCode: (value: string) => void;
+  onCancelJob: () => void;
+  onDownloadHosted: () => void;
 };
 
-export function Inspector({ node, spec, blockedMessage, provider, meshyConfigured, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender }: Props) {
+export function Inspector({ node, spec, blockedMessage, provider, meshyConfigured, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender, hosted, onAccessCode, onCancelJob, onDownloadHosted }: Props) {
   const editable = node && (node.type === "generation" || node.type === "variation") && spec;
   return (
     <aside className={`inspector ${collapsed ? "is-collapsed" : ""}`} aria-label="Node inspector">
@@ -178,9 +218,10 @@ export function Inspector({ node, spec, blockedMessage, provider, meshyConfigure
             <fieldset>
               <legend>Provider</legend>
               <label className="radio"><input type="radio" name="provider" checked={provider === "procedural"} onChange={() => onProvider("procedural")} /> Local procedural <small>no account needed</small></label>
-              <label className="radio"><input type="radio" name="provider" checked={provider === "meshy"} onChange={() => onProvider("meshy")} /> Meshy <small>{meshyConfigured ? "configured · unverified" : "not configured"}</small></label>
+              <label className="radio"><input type="radio" name="provider" checked={provider === "meshy"} onChange={() => onProvider("meshy")} /> Meshy (paid) <small>{meshyConfigured ? "configured · unverified" : "not configured"}</small></label>
             </fieldset>
           )}
+          {node?.type === "generation" && provider === "meshy" && <HostedSection state={hosted} onAccessCode={onAccessCode} onCancel={onCancelJob} onDownload={onDownloadHosted} />}
           {editable && spec && (
             <>
               <p className="inspector__hint">{node.type === "generation" ? `Each change creates a new revision; earlier versions are kept (${revisionCount} so far).` : "Changes are stored on this variation; the source model stays untouched."}</p>

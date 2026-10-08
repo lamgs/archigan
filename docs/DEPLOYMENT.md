@@ -32,6 +32,28 @@ GitHub commit statuses (context `Vercel`) show every deployment since `f43fc44` 
 
 Mitigation: `vercel.json` pins `framework: nextjs`, `npm ci`, `npm run build`, and sets `outputDirectory` to `.next`. If the next deployment still fails, run `npx vercel inspect <dpl_id> --logs` (id is in the failing commit status `target_url`) and append the error here. Also check Project Settings → General: Framework Preset = Next.js, Root Directory empty, Node.js version 20.x–24.x.
 
+## Hosted generation (Meshy) — configuration and manual live smoke test
+
+Hosted generation is **disabled unless all of these server variables are set** (it fails closed):
+
+```text
+MESHY_ENABLED=true
+MESHY_API_KEY=<server-only secret>
+MESHY_ACCESS_CODE=<shared secret users type before any paid request; anyone with it can spend credits>
+MESHY_DAILY_LIMIT=20   # optional, per server instance
+```
+
+Routes: `POST /api/generate` (needs `x-sift-access-code` + `confirmSpend: true`), `GET|DELETE /api/generate/{taskId}` (status / cancel), `GET /api/generate/{taskId}/model` (GLB ingest; only HTTPS `*.meshy.ai` URLs are fetched). Cancel works only for queued tasks; Meshy answers 409 for running ones and the UI says so.
+
+**Status: UNVERIFIED.** Only mocked documented-contract tests exist. To record a real result, use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
+
+1. Create task: `POST /api/generate` returns 202 with a task id; Meshy dashboard shows the task.
+2. Status: `GET /api/generate/{id}` transitions queued → running (progress rises) → completed; compare the raw Meshy JSON with `normalizeTask` (`model_urls.glb`, `task_error.message`, `expires_at` field names are **unconfirmed**).
+3. Ingest: `/model` returns a GLB that opens in the viewer and downloads.
+4. Cancel: DELETE on a queued task succeeds; on a running task returns 409 (`running`).
+5. Failure paths: bad key → `auth`; empty credits → `insufficient-credits`; rapid requests → 429 handling.
+6. Reload mid-task: the job resumes after re-entering the access code.
+
 ## Runtime configuration
 
 The procedural application requires no secrets. Optional hosted generation requires server-side variables:
