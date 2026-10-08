@@ -3,16 +3,16 @@
 ## Vercel environment
 
 - **Project:** `archigan`
-- **Team:** `booth-os`
-- **Deployment URL:** <https://archigan-ctjx7uh6t-booth-os.vercel.app>
-- **Dashboard:** <https://vercel.com/booth-os/archigan/HK1XNPR5cJ75CM18jo433zP48hzX>
+- **Team:** `gabelam` (owner-confirmed 2026-10-08; earlier docs said `booth-os`, which is now outdated)
+- **Deployment URL:** <https://archigan-ctjx7uh6t-booth-os.vercel.app> (recorded under the old `booth-os` scope; re-check the current URL in the `gabelam` dashboard)
+- **Dashboard:** <https://vercel.com/gabelam/archigan>
 - **Recorded:** 2026-10-08
 
 ## Current verification status
 
 The deployment hostname is reachable on Vercel, but an unauthenticated request returns `302 Found` to Vercel's SSO endpoint. Treat the environment as **deployed and access-protected**, not publicly verified.
 
-The Codex Vercel connector identified the `booth-os` team but returned `403 forbidden` for project/deployment inspection. The local Vercel CLI is not installed, so this session could not verify:
+The Codex Vercel connector identified the old `booth-os` team but returned `403 forbidden` for project/deployment inspection. The local Vercel CLI is not installed, so this session could not verify:
 
 - whether the deployment is Preview or Production;
 - which Git commit it contains;
@@ -90,11 +90,11 @@ Until a real-account test succeeds for a provider, the application and status do
 
 ## Authorized verification checklist
 
-From a Vercel-authenticated environment with access to `booth-os`:
+From a Vercel-authenticated environment with access to `gabelam`:
 
 ```bash
-vercel --scope booth-os project inspect archigan
-vercel --scope booth-os inspect archigan-ctjx7uh6t-booth-os.vercel.app
+vercel --scope gabelam project inspect archigan
+vercel --scope gabelam inspect archigan-ctjx7uh6t-booth-os.vercel.app
 vercel curl https://archigan-ctjx7uh6t-booth-os.vercel.app/
 ```
 

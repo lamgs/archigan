@@ -32,7 +32,7 @@ Verified from a **fresh clone of the remote branch**: `npm ci` â†’ lint clean â†
 
 ## Deployment
 
-- Vercel project: `booth-os/archigan`.
+- Vercel project: `gabelam/archigan` (team is `gabelam`, owner-confirmed 2026-10-08; older notes saying `booth-os` are outdated).
 - Recorded URL: `https://archigan-ctjx7uh6t-booth-os.vercel.app`.
 - 2026-10-09: all deployments from `f43fc44` through P0.12 failed on Vercel; adding `vercel.json` (framework `nextjs`) made commit `6fa7198` deploy successfully per the GitHub `Vercel` status. Logs/runtime remain unverified.
 - Observed 2026-10-08: hostname responds with a `302` redirect to Vercel SSO/Deployment Protection.

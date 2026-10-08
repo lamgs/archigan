@@ -70,7 +70,7 @@ The Playwright suite covers the ten acceptance scenarios in [`docs/PRODUCT_REQUI
 
 ## Deployment
 
-Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framework and output directory). The Vercel project is `booth-os/archigan`; the deployment is access-protected, so see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the verification checklist and the Meshy variables. Do not commit secrets.
+Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framework and output directory). The Vercel project is `gabelam/archigan`; the deployment is access-protected, so see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the verification checklist and the Meshy variables. Do not commit secrets.
 
 ## Limitations
 
