@@ -4,8 +4,10 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Group } from "three";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
-import type { MassingSpec, Provider } from "@/lib/contracts";
-import { buildMassingGroup, disposeMassingGroup } from "@/lib/three-massing";
+import type { BuildingSpec, Provider } from "@/lib/contracts";
+import { computeLayout } from "@/lib/geometry";
+import { buildBuildingGroup, disposeBuildingGroup } from "@/lib/three-building";
+import { describeSpec } from "@/lib/typologies";
 
 function CameraControls({ resetToken }: { resetToken: number }) {
   const { camera, gl } = useThree();
@@ -39,9 +41,9 @@ function CameraControls({ resetToken }: { resetToken: number }) {
   return null;
 }
 
-function MassingModel({ spec }: { spec: MassingSpec }) {
-  const group = useMemo(() => buildMassingGroup(spec), [spec]);
-  useEffect(() => () => disposeMassingGroup(group), [group]);
+function MassingModel({ spec }: { spec: BuildingSpec }) {
+  const group = useMemo(() => buildBuildingGroup(spec), [spec]);
+  useEffect(() => () => disposeBuildingGroup(group), [group]);
   return <primitive object={group} />;
 }
 
@@ -57,8 +59,10 @@ function download(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
 
-export function ModelPreview({ spec, provider }: { spec: MassingSpec; provider: Provider }) {
+export function ModelPreview({ spec, provider }: { spec: BuildingSpec; provider: Provider }) {
   const canvasWrap = useRef<HTMLDivElement>(null);
+  const summary = useMemo(() => describeSpec(spec), [spec]);
+  const warnings = useMemo(() => computeLayout(spec).warnings, [spec]);
   const [resetToken, setResetToken] = useState(0);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "complete" | "error">("idle");
 
@@ -69,7 +73,7 @@ export function ModelPreview({ spec, provider }: { spec: MassingSpec; provider: 
 
   const exportGlb = async () => {
     setExportState("exporting");
-    const group: Group = buildMassingGroup(spec);
+    const group: Group = buildBuildingGroup(spec);
     try {
       const { GLTFExporter } = await import("three/examples/jsm/exporters/GLTFExporter.js");
       const result = await new GLTFExporter().parseAsync(group, { binary: true });
@@ -79,7 +83,7 @@ export function ModelPreview({ spec, provider }: { spec: MassingSpec; provider: 
     } catch {
       setExportState("error");
     } finally {
-      disposeMassingGroup(group);
+      disposeBuildingGroup(group);
     }
   };
 
@@ -103,7 +107,7 @@ export function ModelPreview({ spec, provider }: { spec: MassingSpec; provider: 
           <CameraControls resetToken={resetToken} />
         </Canvas>
         <div className="preview-panel__caption">
-          <span>{spec.floors} levels</span><span>{Math.round(spec.width)} × {Math.round(spec.depth)} m</span><span>{spec.material}</span>
+          <span>{summary.levels} levels</span><span>{summary.volumes} {summary.volumes === 1 ? "volume" : "volumes"}</span><span>{summary.footprint}</span>
         </div>
       </div>
       <div className="preview-panel__actions">
@@ -113,6 +117,7 @@ export function ModelPreview({ spec, provider }: { spec: MassingSpec; provider: 
           {exportState === "exporting" ? "Exporting…" : exportState === "complete" ? "GLB saved" : exportState === "error" ? "Retry GLB" : "GLB"}
         </button>
       </div>
+      {warnings.length > 0 && <p className="preview-panel__note" role="status">{warnings[0]}</p>}
       <p className="preview-panel__note">Concept massing only — not BIM, engineering, or construction geometry.</p>
     </aside>
   );

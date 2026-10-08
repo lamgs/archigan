@@ -2,6 +2,13 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Claude — P0.10 architectural geometry engine
+
+- Added `geometry.ts` (pure layout), `typologies.ts` (`detectTypology`, `deriveBuildingSpec`, `describeSpec`), `three-building.ts` (mesh builder + disposal); switched `model-preview.tsx` and `studio-shell.tsx` to `BuildingSpec`. `three-massing.ts` is retained but unused.
+- Checks: test 34/34, lint clean, build passes; Playwright screenshots confirmed four visibly distinct typologies, no page errors.
+- Open risks: spec is derived, not persisted; facade vertical/grid and courtyard voids unimplemented; slight shimmer on glazing bands at distance; viewer framing still fixed camera (P0.15).
+- Next: P0.11 dashboard/CRUD, then P0.12–P0.14 to move the UI onto v2 and persist specs.
+
 ## 2026-10-08 — Claude — P0.09 canonical contracts and migration
 
 - Added v2 Zod contracts to `contracts.ts`, port/connection/cycle validation in `graph.ts`, and v1→v2 migration plus `toLegacyProject` projection and `reconcileStores` in `migrate.ts`.

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Provider, SiftProject } from "@/lib/contracts";
 import { deriveMassing } from "@/lib/massing";
+import { deriveBuildingSpec, describeSpec, detectTypology } from "@/lib/typologies";
 import { defaultGraph, sampleProjects } from "@/lib/samples";
 import { listProjects, saveProject } from "@/lib/storage";
 import { StudioNode, type StudioFlowNode, type StudioNodeData } from "./studio-node";
@@ -21,7 +22,7 @@ function truncate(value: string, length = 88) {
 
 function nodeData(type: SiftProject["graph"]["nodes"][number]["type"], project: Pick<SiftProject, "prompt" | "refinement" | "massing" | "provider">): StudioNodeData {
   if (type === "brief") return { kind: type, eyebrow: "01 / Intent", title: "Design brief", body: truncate(project.prompt), meta: `${project.prompt.length} characters` };
-  if (type === "massing") return { kind: type, eyebrow: "02 / Generate", title: "Massing study", body: `${project.massing.floors} levels · ${Math.round(project.massing.width)} × ${Math.round(project.massing.depth)} m`, meta: project.provider === "procedural" ? "Deterministic local model" : "Hosted preview" };
+  if (type === "massing") return { kind: type, eyebrow: "02 / Generate", title: "Massing study", body: (() => { const d = describeSpec(deriveBuildingSpec(project.prompt, project.refinement)); return `${d.levels} levels · ${d.volumes} ${d.volumes === 1 ? "volume" : "volumes"} · ${d.footprint}`; })(), meta: project.provider === "procedural" ? "Deterministic local model" : "Hosted preview" };
   if (type === "refine") return { kind: type, eyebrow: "03 / Direct", title: "Refine form", body: project.refinement || "Add a material, void, terrace, or proportion change.", meta: project.refinement ? "Applied to current study" : "Optional" };
   return { kind: type, eyebrow: "04 / Deliver", title: "Export study", body: "Capture the active view or download editable geometry.", meta: "PNG · GLB" };
 }
@@ -103,6 +104,8 @@ function Studio() {
     }
   };
 
+  const buildingSpec = useMemo(() => deriveBuildingSpec(project.prompt, project.refinement), [project.prompt, project.refinement]);
+
   const flowEdges = useMemo(() => edges.map((edge) => ({ ...edge, animated: edge.target === "massing", style: { stroke: "#8f2f24", strokeWidth: 1.8 } })), [edges]);
 
   return (
@@ -117,7 +120,7 @@ function Studio() {
         <nav className="project-rail" aria-label="Projects">
           <div><span className="section-kicker">Starting points</span><h2>Studies</h2></div>
           <div className="sample-list">
-            {sampleProjects.map((sample, index) => <button type="button" key={sample.id} onClick={() => load(sample)}><span>0{index + 1}</span><strong>{sample.name}</strong><small>{sample.massing.floors} levels · {sample.massing.material}</small></button>)}
+            {sampleProjects.map((sample, index) => <button type="button" key={sample.id} onClick={() => load(sample)}><span>0{index + 1}</span><strong>{sample.name}</strong><small>{describeSpec(deriveBuildingSpec(sample.prompt, sample.refinement)).levels} levels · {detectTypology(`${sample.prompt} ${sample.refinement}`.toLowerCase())}</small></button>)}
           </div>
           <div className="saved-list"><span className="section-kicker">Saved here</span>{saved.length === 0 ? <p>No local projects yet.</p> : saved.slice(0, 4).map((item) => <button type="button" key={item.id} onClick={() => load(item)}>{item.name}</button>)}</div>
           <footer><span>Local-first</span><p>Your projects stay in this browser.</p></footer>
@@ -139,7 +142,7 @@ function Studio() {
           </div>
         </section>
 
-        <ModelPreview spec={project.massing} provider={provider} />
+        <ModelPreview spec={buildingSpec} provider={provider} />
       </section>
     </main>
   );
