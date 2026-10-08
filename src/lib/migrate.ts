@@ -186,9 +186,11 @@ export type ReconciledStore = { projects: SiftProjectV2[]; preserved: unknown[] 
 /**
  * Merges the current v2 store with the untouched legacy v1 store. Valid records are migrated; records that
  * cannot be parsed are returned in `preserved` so callers write them back instead of discarding them.
- * v2 records win over legacy records with the same id.
+ * v2 records win over legacy records with the same id. `deletedIds` are tombstones that keep deleted legacy
+ * projects from reappearing (the legacy key is never rewritten).
  */
-export function reconcileStores(v2Raw: unknown, legacyRaw: unknown): ReconciledStore {
+export function reconcileStores(v2Raw: unknown, legacyRaw: unknown, deletedIds: string[] = []): ReconciledStore {
+  const deleted = new Set(deletedIds);
   const projects = new Map<string, SiftProjectV2>();
   const preserved: unknown[] = [];
   const ingest = (raw: unknown, overwrite: boolean) => {
@@ -196,6 +198,7 @@ export function reconcileStores(v2Raw: unknown, legacyRaw: unknown): ReconciledS
     raw.forEach((item) => {
       const result = migrateProject(item);
       if (!result.ok) return void preserved.push(item);
+      if (deleted.has(result.project.id)) return;
       if (overwrite || !projects.has(result.project.id)) projects.set(result.project.id, result.project);
     });
   };

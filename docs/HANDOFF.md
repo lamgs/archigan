@@ -2,6 +2,13 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.11 project dashboard and CRUD
+
+- Added `dashboard.tsx`, `projects.ts` (name validation, unique names, blank/sample-copy/rename helpers), `deleteProject` with tombstones in `storage.ts`, and `fake-indexeddb` (dev dep) storage tests. Shell now opens on the dashboard; brand/“All projects” returns to it; blank projects show example-brief chips and an empty preview.
+- Checks: test 43/43, lint clean, build passes. Playwright flow verified first run → example → generate (autosave) → rename (incl. blank-name error) → reload → open → delete with confirmation → reload → sample copy; no page errors.
+- Open risks: deletion is permanent; rename uniqueness is checked against loaded list only; `saveProject` of an open project whose record was deleted elsewhere revives it (intended).
+- Next: P0.12 typed canvas (prompt/generation/model/render/variation nodes, port validation in `onConnect` using `graph.ts`, persisted viewport) — this is where the UI should move onto `SiftProjectV2`.
+
 ## 2026-10-08 — Claude — P0.10 architectural geometry engine
 
 - Added `geometry.ts` (pure layout), `typologies.ts` (`detectTypology`, `deriveBuildingSpec`, `describeSpec`), `three-building.ts` (mesh builder + disposal); switched `model-preview.tsx` and `studio-shell.tsx` to `BuildingSpec`. `three-massing.ts` is retained but unused.

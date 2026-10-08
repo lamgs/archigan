@@ -16,6 +16,7 @@
 
 - Canonical v2 contracts (`BuildingSpec`, `Artifact`, `GenerationJob`, `DesignNode`/ports, `DesignRevision`, `SiftProjectV2`), graph connection/cycle validation, and a lossless v1→v2 migration. Storage writes v2 (`projects-v2`), reads legacy `projects-v1` read-only, preserves unreadable records, and saves in one atomic transaction.
 - Geometry engine: `computeLayout(BuildingSpec)` (rectangle/circle footprints, multi-volume podium/tower, offsets, twist, taper, setbacks, roof, glazing, bounds, clamping warnings) rendered by `three-building.ts`; `deriveBuildingSpec` maps prompts to five typologies. Preview, GLB export, and the massing node now use `BuildingSpec`; browser-verified distinct silhouettes for terraced, twin, cylindrical, and rotated briefs.
+- Project dashboard (`dashboard.tsx`, `projects.ts`): first-run empty state with example briefs, new/open/rename/delete with confirmation, samples open as editable copies, autosave on Generate. Storage CRUD is tested against `fake-indexeddb`.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -32,7 +33,7 @@
 - Persisted projects still store legacy `MassingSpec`; the viewer derives `BuildingSpec` from prompt+refinement at render time (not persisted, not user-editable until P0.13/P0.17). Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is now unused.
 - Direct parameter controls, contextual inspector, non-destructive design branches, and restored lineage are not implemented.
 - Camera presets, expanded viewer, selectable render/material/lighting modes, render nodes, and resolution-specific PNG artifacts are not implemented.
-- Project create/delete dashboard flows and complete asset/job persistence are not implemented.
+- Complete asset/job persistence is not implemented; deleted projects are not recoverable; a blank new project is not persisted until its first Generate (schema requires a prompt).
 - Meshy create code exists, but the client job lifecycle, polling/streaming, persistent GLB ingestion, paid-request protection, and provider-mocked tests remain open.
 - Procedural output remains conceptual massing, not BIM, code-compliant, structural, or fabrication geometry.
 - Automated browser end-to-end coverage is not yet committed; the current flow has been manually smoke-tested in the in-app browser.
@@ -41,7 +42,7 @@
 
 ## Verification
 
-- `npm run test`: passed, 4 files / 34 tests.
+- `npm run test`: passed, 5 files / 43 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -49,5 +50,5 @@
 
 ## Next action
 
-Implement P0.11 (project dashboard/CRUD), then P0.12–P0.14, which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement P0.12 (typed executable canvas), then P0.13–P0.14, which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 

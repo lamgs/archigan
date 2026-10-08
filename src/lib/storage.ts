@@ -5,33 +5,50 @@ import { migrateProject, reconcileStores, toLegacyProject } from "./migrate";
 const store = createStore("sift-projects", "projects");
 const LEGACY_KEY = "projects-v1"; // read-only; never rewritten or deleted
 const PROJECTS_KEY = "projects-v2";
+const DELETED_KEY = "projects-deleted"; // tombstones so deleted legacy projects stay deleted
 const MAX_PROJECTS = 30;
 
+const byRecency = <T extends { updatedAt: string }>(a: T, b: T) => b.updatedAt.localeCompare(a.updatedAt);
+
+async function readAll() {
+  const [v2Raw, legacyRaw, deleted] = await Promise.all([get(PROJECTS_KEY, store), get(LEGACY_KEY, store), get<string[]>(DELETED_KEY, store)]);
+  return { v2Raw, legacyRaw, deleted: Array.isArray(deleted) ? deleted : [] };
+}
+
 export async function listProjects(): Promise<SiftProject[]> {
-  const [v2Raw, legacyRaw] = await Promise.all([get(PROJECTS_KEY, store), get(LEGACY_KEY, store)]);
-  return reconcileStores(v2Raw, legacyRaw)
+  const { v2Raw, legacyRaw, deleted } = await readAll();
+  return reconcileStores(v2Raw, legacyRaw, deleted)
     .projects.flatMap((project) => {
       const legacy = toLegacyProject(project);
       return legacy ? [legacy] : [];
     })
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort(byRecency);
 }
 
 export async function saveProject(project: SiftProject) {
   const parsed = siftProjectSchema.parse(project);
   const migrated = migrateProject(parsed);
   if (!migrated.ok) throw new Error(migrated.error);
-  const legacyRaw = await get(LEGACY_KEY, store);
+  // Saving a previously deleted id (e.g. re-saving an open project) revives it.
+  await update<string[]>(DELETED_KEY, (current) => (Array.isArray(current) ? current.filter((item) => item !== parsed.id) : []), store);
+  const { legacyRaw, deleted } = await readAll();
   // Single read-modify-write transaction: concurrent saves cannot overwrite one another,
   // and unreadable records already in the v2 store are written back rather than dropped.
   await update<unknown[]>(
     PROJECTS_KEY,
     (current) => {
-      const { projects, preserved } = reconcileStores(current, legacyRaw);
-      const next = [migrated.project, ...projects.filter((item) => item.id !== migrated.project.id).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))].slice(0, MAX_PROJECTS);
+      const { projects, preserved } = reconcileStores(current, legacyRaw, deleted);
+      const next = [migrated.project, ...projects.filter((item) => item.id !== migrated.project.id).sort(byRecency)].slice(0, MAX_PROJECTS);
       return [...next, ...preserved];
     },
     store,
   );
+  return listProjects();
+}
+
+export async function deleteProject(id: string) {
+  // Tombstone first: if the second write fails the project is still hidden rather than half-deleted.
+  await update<string[]>(DELETED_KEY, (current) => [...new Set([...(Array.isArray(current) ? current : []), id])], store);
+  await update<unknown[]>(PROJECTS_KEY, (current) => (Array.isArray(current) ? current.filter((item) => (item as { id?: unknown } | null)?.id !== id) : []), store);
   return listProjects();
 }
