@@ -8,8 +8,10 @@ import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, renameProject, validateProjectName } from "@/lib/projects";
 import { sampleProjects } from "@/lib/samples";
 import { deleteProject, listProjects, saveProject } from "@/lib/storage";
-import { addConnectedNode, addNode, connectNodes, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, runGeneration, type FlowGraph } from "@/lib/workflow";
+import type { SpecEdit } from "@/lib/spec-edit";
+import { addConnectedNode, addNode, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, runGeneration, type FlowGraph } from "@/lib/workflow";
 import { Dashboard } from "./dashboard";
+import { Inspector } from "./inspector";
 import { StudioNode, type StudioFlowNode } from "./studio-node";
 
 const nodeTypes = { studio: StudioNode };
@@ -44,6 +46,8 @@ function Studio() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [notice, setNotice] = useState("Ready to shape a study.");
   const [meshyConfigured, setMeshyConfigured] = useState(false);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
   const counter = useRef(0);
 
   useEffect(() => {
@@ -89,6 +93,30 @@ function Studio() {
     setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, artifactId: result.state.nodes.find((item) => item.id === id)?.artifactId } } : node)));
     setNotice("Generated a new building artifact.");
     void persist(next, nextGraph);
+  };
+
+  const selectedNode = graph.nodes.find((node) => node.id === selectedId);
+  const selectedResult = selectedId ? results[selectedId] : undefined;
+  const selectedSpec = selectedResult && selectedResult.status !== "blocked" && selectedResult.output.kind === "spec" ? selectedResult.output.spec : undefined;
+
+  const editGeometry = (edit: SpecEdit) => {
+    if (!selectedId) return;
+    const result = editNodeGeometry({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, selectedId, edit, { artifact: uid("artifact"), revision: uid("rev") }, new Date().toISOString());
+    if (!result.ok) return setEditError(result.message);
+    setEditError(null);
+    const next = { ...meta, artifacts: result.state.artifacts, revisions: result.state.revisions };
+    const nextGraph = { nodes: result.state.nodes, edges: result.state.edges };
+    setMeta(next);
+    setNodes((current) => current.map((node) => {
+      const updated = result.state.nodes.find((item) => item.id === node.id);
+      return updated && node.id === selectedId ? { ...node, data: { ...node.data, params: updated.params, artifactId: updated.artifactId } } : node;
+    }));
+    void persist(next, nextGraph);
+  };
+
+  const clearEdits = () => {
+    if (!selectedId) return;
+    setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, params: { ...node.data.params, edits: [] } } } : node)));
   };
 
   const applyGraph = (next: FlowGraph) => {
@@ -210,8 +238,8 @@ function Studio() {
             <footer><span>Local-first</span><p>Your projects stay in this browser.</p></footer>
           </nav>
 
-          <section className="canvas-panel" aria-label="Generation workflow">
-            <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><div className="provider-switch" aria-label="Generation provider"><button type="button" className={provider === "procedural" ? "is-active" : ""} onClick={() => setProvider("procedural")}>Local</button><button type="button" className={provider === "meshy" ? "is-active" : ""} onClick={() => setProvider("meshy")}>Meshy <i className={meshyConfigured ? "is-configured" : ""} /></button></div></header>
+          <section className={`canvas-panel ${inspectorCollapsed ? "canvas-panel--inspector-collapsed" : "canvas-panel--inspector-open"}`} aria-label="Generation workflow">
+            <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><span className="provider-chip" title="Change the provider in the Generation node inspector">{provider === "procedural" ? "Local procedural" : "Meshy (unverified)"}</span></header>
             <div className="add-toolbar" role="toolbar" aria-label="Add node">
               <span>Add</span>
               {NODE_ORDER.map((type) => <button type="button" key={type} onClick={() => addFree(type)}>{NODE_LABELS[type]}</button>)}
@@ -223,6 +251,20 @@ function Studio() {
                 <MiniMap pannable zoomable nodeColor="#8f2f24" maskColor="rgba(236,232,223,.72)" />
               </ReactFlow>
             </div>
+            <Inspector
+              node={selectedNode}
+              spec={selectedSpec}
+              blockedMessage={selectedResult?.status === "blocked" ? selectedResult.message : undefined}
+              provider={provider}
+              meshyConfigured={meshyConfigured}
+              revisionCount={Object.keys(meta.revisions).length}
+              collapsed={inspectorCollapsed}
+              error={editError}
+              onToggle={() => setInspectorCollapsed((value) => !value)}
+              onProvider={setProvider}
+              onEdit={editGeometry}
+              onClearEdits={clearEdits}
+            />
             {blank && <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>}
           </section>
 

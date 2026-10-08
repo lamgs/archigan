@@ -10,6 +10,7 @@ import {
   type Provider,
 } from "./contracts";
 import { NODE_PORTS, validateConnection } from "./graph";
+import { applyEdit, applyEdits, describeEdit, mergeEdit, type SpecEdit } from "./spec-edit";
 import { deriveBuildingSpec, normalizeBriefText } from "./typologies";
 
 export type FlowGraph = { nodes: DesignNode[]; edges: DesignEdge[] };
@@ -22,6 +23,11 @@ export const NODE_LABELS: Record<DesignNodeType, string> = { prompt: "Prompt", g
 const text = (node: DesignNode) => (typeof node.params.text === "string" ? node.params.text : "");
 const nodeText = (node: DesignNode) => text(node).trim();
 const same = (a: string, b: string) => normalizeBriefText(a) === normalizeBriefText(b);
+
+/** Parameter edits stored on a variation node (replayed over its derived spec; the upstream artifact is never touched). */
+export function variationEdits(node: Pick<DesignNode, "params">): SpecEdit[] {
+  return Array.isArray(node.params.edits) ? (node.params.edits as SpecEdit[]) : [];
+}
 
 export function defaultParams(type: DesignNodeType): Record<string, unknown> {
   return type === "prompt" || type === "variation" ? { text: "" } : {};
@@ -84,7 +90,8 @@ export function evaluateGraph(graph: FlowGraph, artifacts: Record<string, Artifa
     if (node.type === "variation") {
       const extra = nodeText(node);
       const brief: Brief = { prompt: input.output.brief.prompt, refinement: [input.output.brief.refinement, extra].filter(Boolean).join(" ") };
-      const spec = extra ? deriveBuildingSpec(brief.prompt, brief.refinement) : input.output.spec;
+      const base = extra ? deriveBuildingSpec(brief.prompt, brief.refinement) : input.output.spec;
+      const spec = applyEdits(base, variationEdits(node));
       return { status: input.status, output: { kind: "spec", spec, brief } };
     }
     return { status: input.status, output: input.output }; // model / render consume the spec
@@ -166,4 +173,32 @@ export function previewSpec(results: Record<string, NodeResult>, graph: FlowGrap
     return id && result && result.status !== "blocked" && result.output.kind === "spec" ? { spec: result.output.spec, nodeId: id, stale: result.status === "stale" } : undefined;
   };
   return pick(selectedId) ?? pick(graph.nodes.find((node) => node.type === "model" && pick(node.id))?.id) ?? pick(graph.nodes.find((node) => pick(node.id))?.id);
+}
+
+/**
+ * Applies a geometry edit to the spec a node outputs without overwriting its source:
+ * - variation node: the edit is stored on the node and replayed over the upstream spec;
+ * - generation node: a new child artifact is created, the old one is kept, and a `parameters` revision links them.
+ */
+export function editNodeGeometry(state: RunInput, nodeId: string, edit: SpecEdit, ids: { artifact: string; revision: string }, now: string): Mutation<{ state: RunInput }> {
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node) return { ok: false, message: "Select a node first." };
+  const results = evaluateGraph(state, state.artifacts);
+  const current = results[nodeId];
+  if (!current || current.status === "blocked" || current.output.kind !== "spec") return { ok: false, message: "This node has no model to edit yet." };
+
+  if (node.type === "variation") {
+    const edits = mergeEdit(variationEdits(node), edit);
+    const trial = { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, params: { ...item.params, edits } } : item)) };
+    const check = applyEdit(current.output.spec, edit); // validate against what the user is looking at
+    if (!check.ok) return check;
+    return { ok: true, state: trial };
+  }
+  if (node.type !== "generation" || !node.artifactId || !state.artifacts[node.artifactId]) return { ok: false, message: "Geometry can be edited on Generation and Variation nodes." };
+  const result = applyEdit(current.output.spec, edit);
+  if (!result.ok) return result;
+  const parent = state.artifacts[node.artifactId];
+  const artifact: Artifact = { id: ids.artifact, kind: "building-spec", sourceNodeId: nodeId, createdAt: now, storageKey: `inline:${ids.artifact}`, metadata: { spec: result.spec, brief: current.output.brief, origin: "parameters", edit, parentArtifactId: parent.id } };
+  const revision: DesignRevision = { id: ids.revision, parentArtifactId: parent.id, childArtifactId: artifact.id, sourceNodeIds: [nodeId], change: "parameters", instruction: describeEdit(edit), createdAt: now };
+  return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId: artifact.id } : item)), artifacts: { ...state.artifacts, [artifact.id]: artifact }, revisions: { ...state.revisions, [revision.id]: revision } } };
 }

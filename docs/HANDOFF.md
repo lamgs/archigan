@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.13 contextual inspector (+ Vercel output directory)
+
+- Added `spec-edit.ts` (typed `SpecEdit`, `applyEdit` validated through `buildingSpecSchema`, replay/merge helpers), `editNodeGeometry` in `workflow.ts`, and `inspector.tsx`; canvas shrinks to make room for the inspector; provider switch moved from the header into the Generation inspector.
+- Vercel: user reported `No Output Directory named "public"`; `vercel.json` now sets `outputDirectory: ".next"`. Commit `b0fc5f3` reports GitHub status `success`; app behavior behind protection still unverified. Recommended: also clear the Output Directory override in Project Settings.
+- Checks: test 63/63, lint clean, build passes. Playwright: per-node inspector contents (no irrelevant controls), generation edit → revision + persisted, invalid edit message, variation edit leaves source unchanged, collapse/expand, reload restores both.
+- Open risks: no UI to browse/restore earlier revisions yet (P0.14); each committed edit on a Generation node adds an artifact (no pruning); inspector volume selector defaults to the first volume.
+- Next: P0.14 branching — show lineage and let a design fork into two visible branches.
+
 ## 2026-10-09 — Claude — P0.12 typed executable canvas
 
 - UI moved onto `SiftProjectV2`: new `workflow.ts` (evaluate/connect/add/run/preview), typed handles in `studio-node.tsx`, rewritten `studio-shell.tsx` (add toolbar, Add-next menu, `isValidConnection`, viewport persistence). Storage API is v2-native; v1 samples moved to `legacy-fixtures.ts`; samples/projects are v2.

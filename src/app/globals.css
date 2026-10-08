@@ -190,3 +190,27 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .studio-node .port--render-png { background: #3d6a8c; }
 .studio-node .react-flow__handle { width: 11px; height: 11px; }
 .flow-wrap { inset: 0; }
+
+.inspector { position: absolute; z-index: 7; top: 118px; right: 16px; width: 290px; max-height: calc(100% - 300px); display: flex; flex-direction: column; border: 1px solid var(--line); background: rgba(247,244,237,.96); backdrop-filter: blur(12px); box-shadow: var(--shadow); }
+.inspector.is-collapsed { width: auto; }
+.inspector > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.inspector.is-collapsed > header { border-bottom: 0; }
+.inspector h2 { margin: 2px 0 0; font: 400 18px Georgia, serif; }
+.inspector > header button { width: 26px; height: 26px; border: 1px solid var(--line); border-radius: 50%; background: transparent; cursor: pointer; }
+.inspector__body { overflow: auto; padding: 10px 12px 14px; display: grid; gap: 10px; }
+.inspector__hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.inspector__error { margin: 0; padding: 6px 8px; background: #f3d9d4; color: var(--accent); font-size: 11px; }
+.inspector__group { display: grid; gap: 10px; }
+.inspector fieldset { margin: 0; padding: 8px 10px 10px; border: 1px solid var(--line); display: grid; gap: 7px; }
+.inspector legend { padding: 0 4px; color: var(--accent); font-size: 9px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.field { display: grid; grid-template-columns: 1fr 96px; align-items: center; gap: 8px; font-size: 11px; }
+.field input, .field select { width: 100%; padding: 4px 6px; border: 1px solid var(--line); background: white; font-size: 11px; }
+.field--material { grid-template-columns: 1fr 36px 80px; }
+.field--material input { padding: 0; height: 24px; }
+.radio { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.radio small { color: var(--muted); }
+.inspector .ghost-button { padding: 6px 10px; font-size: 11px; }
+.canvas-panel--inspector-open .flow-wrap { right: 322px; }
+.canvas-panel--inspector-collapsed .flow-wrap { right: 130px; }
+.canvas-panel--inspector-open .chip-row--canvas { right: 340px; }
+.inspector { top: 118px; bottom: 16px; max-height: none; }
