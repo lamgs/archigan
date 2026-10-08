@@ -1,0 +1,23 @@
+# Handoff log
+
+Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
+
+## 2026-10-08 — Codex — Master brief reconciliation
+
+- Added `PRODUCT_REQUIREMENTS.md` as the durable, implementation-oriented source for the full user-supplied master brief.
+- Rebuilt `IMPLEMENTATION_PLAN.md` into Phases 0–6 with delivered baselines, remaining work, and strict exit gates.
+- Reprioritized `TASKS.md`: the current app remains a verified foundation, while canonical contracts, richer geometry, project CRUD, typed canvas execution, inspector, branching, expanded viewer, render artifacts, complete persistence, Meshy lifecycle, robust states, acceptance automation, and portfolio completion are explicit P0 work.
+- Updated agent rules, decisions, and status so neither Codex nor Claude Code can mistake the existing vertical slice for the master-brief definition of done.
+- Tests: not rerun because this handoff changed Markdown coordination files only.
+- Next: implement P0.09 canonical contracts/schema migration, followed by P0.10 architectural geometry.
+
+## 2026-10-08 — Codex — Sift 2.0 foundation
+
+- Preserved the clean legacy PyTorch project and documented it as historical/reference-only.
+- Added shared agent rules, roadmap, task acceptance criteria, architecture/contracts, decisions, status, and this handoff log.
+- Added the first local-first Next.js vertical slice: workflow graph, procedural 3D, refinement, local projects, samples, exports, and server-only provider boundary.
+- Verified official public docs describe xFigura as a node-based multi-model workspace and Meshy v2 Text-to-3D as an async preview/refine API. No live Meshy account call was made.
+- Checks: `npm run test` passed (6/6), `npm run lint` passed, `npm run build` passed, and `npm audit --audit-level=high` reported zero vulnerabilities.
+- Browser smoke test: prompt + refinement regenerated a 20-level glass tower, IndexedDB save updated the local project list, R3F rendered successfully, and GLB serialization reached the completed download state.
+- Next: add automated browser end-to-end coverage, or configure a paid Meshy test key and add explicit credit confirmation before attempting the P1 live-provider smoke test.
+

@@ -1,4 +1,37 @@
-# "ArchiGAN - Artificial Architectures": PyTorch Implementation.
+# Sift 2.0
+
+Sift is a focused, xFigura-inspired architectural prompt-to-3D workspace. Describe a building idea, refine it on a node canvas, inspect an immediate procedural massing model, and export a render or GLB. The default path is local-first and does not require an AI account.
+
+## Quick start
+
+```bash
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open <http://localhost:3000>. The procedural provider works without environment variables.
+
+```bash
+npm run test
+npm run lint
+npm run build
+```
+
+Project coordination lives in [`AGENTS.md`](./AGENTS.md), with current state in [`docs/STATUS.md`](./docs/STATUS.md) and prioritized acceptance criteria in [`docs/TASKS.md`](./docs/TASKS.md).
+
+## Optional Meshy provider
+
+Meshy integration is server-side and off by default. Copy `.env.example` to `.env.local`, set `MESHY_ENABLED=true`, and add a server-only `MESHY_API_KEY`. Never expose the key with a `NEXT_PUBLIC_` prefix. The current adapter is intentionally reported as **unverified** until a real account smoke test succeeds.
+
+## Legacy research prototype
+
+The original repository was a PyTorch implementation of an early voxel 3D-GAN. Its Python files, notebook, and sample results are preserved for provenance but are not dependencies of Sift, require old tooling and proprietary data, and are not part of the supported product.
+
+<details>
+<summary>Original ArchiGAN notes</summary>
+
+## "ArchiGAN - Artificial Architectures": PyTorch Implementation.
 <!-- [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](https://github.com/meetshah1995/tf-3dgan/blob/master/LICENSE)
 [![arXiv Tag](https://img.shields.io/badge/arXiv-1610.07584-brightgreen.svg)](https://arxiv.org/abs/1610.07584)
  -->
@@ -56,5 +89,7 @@ go to  [Soumith’s ganhacks repo.](https://github.com/soumith/ganhacks)
 ### Acknowledgements
 
 * This code is a heavily modified version based on both [3DGAN-Pytorch](https://github.com/rimchang/3DGAN-Pytorch) and [tf-3dgan](https://github.com/meetshah1995/tf-3dgan) and thanks for them.
+
+</details>
 
 

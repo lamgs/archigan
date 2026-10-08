@@ -1,0 +1,43 @@
+# Prioritized tasks and acceptance criteria
+
+Status legend: `[x]` complete, `[ ]` incomplete. P0 is required for the master-brief MVP; P1 begins only after the P0 acceptance gate. Task IDs remain stable across handoffs.
+
+## Completed foundation
+
+- [x] **P0.01 Shared coordination.** `AGENTS.md`, Claude entrypoint, requirements, implementation plan, architecture, decisions, tasks, status, and handoff log exist in the repository.
+- [x] **P0.02 Modern application foundation.** Next.js App Router, strict TypeScript, React Flow, R3F/Three.js, Zod, IndexedDB adapter, Vitest, lint, and production build are configured.
+- [x] **P0.03 Baseline real geometry.** Normalized prompts deterministically produce non-empty procedural geometry with floors, proportion, twist, terrace, courtyard, and material cues.
+- [x] **P0.04 Baseline canvas.** Movable connected nodes, dotted infinite canvas, zoom, pan, fit-view, minimap, selection, and responsive shell work.
+- [x] **P0.05 Baseline viewer/export.** Real geometry supports orbit, pan, zoom, reset, studio-like lighting, PNG capture path, and binary GLB serialization.
+- [x] **P0.06 Baseline local persistence.** IndexedDB adapter saves and reopens project graph content; three starting presets load without credentials.
+- [x] **P0.07 Safe provider boundary.** Meshy credential stays server-side; create request uses documented v2 endpoint; configured and live-verified states remain distinct.
+- [x] **P0.08 Baseline verification.** Six unit tests, lint, production build, dependency audit, and manual browser smoke test pass.
+
+## P0 — MVP gap closure, in execution order
+
+- [ ] **P0.09 Canonical domain contracts and migration.** Add runtime-validated `BuildingSpec`, `Artifact`, `GenerationJob`, typed `DesignNode`/ports, and `DesignRevision`; migrate persisted schema v1 without data loss. Acceptance: invalid specifications/connections fail clearly, jobs and artifacts are separate, and cycle rules are tested.
+- [ ] **P0.10 Architectural geometry engine.** Support rectangle/circle footprints, podium/tower and multiple volumes, floor height, offsets, rotation, taper, stepped setbacks, facade style/glazing, roof, and materials. Acceptance: Terraced Tower, Twin Towers, and Cylindrical/Rotated Tower are structurally distinct and parameter changes are visible.
+- [ ] **P0.11 Project dashboard and CRUD.** Add new/open/rename/delete/sample flows and an empty-canvas first run with example prompts. Acceptance: project deletion is recoverable or confirmed, and every action persists correctly.
+- [ ] **P0.12 Typed executable canvas.** Add prompt, generation, model, render, and variation nodes; contextual add toolbar/menu; typed ports; supported-connection validation; and persisted viewport. Acceptance: connectors represent actual artifact flow and unsupported/cyclic wiring is rejected.
+- [ ] **P0.13 Contextual inspector.** Add a collapsible selected-node panel for geometry, provider, material, camera, and render settings. Acceptance: irrelevant controls are absent and geometry changes create a new revision rather than overwrite the source.
+- [ ] **P0.14 Non-destructive branching.** Create child nodes/specs/artifacts from parameter changes and follow-up prompts. Acceptance: two branches remain visible with correct lineage and restore after reload.
+- [ ] **P0.15 Expanded 3D viewer.** Add focus mode, automatic bounds framing, perspective/top/front/right/axonometric presets, frame/reset, grid/axes/shadow toggles, and clay/shaded/glass-concrete/wireframe modes. Acceptance: pointer gestures never drag/pan the outer canvas and controls are keyboard accessible.
+- [ ] **P0.16 Render artifact pipeline.** Add render nodes bound to model, camera, material, light, background, and resolution. Acceptance: 1024×1024 and 1600×900 PNGs match the selected geometry/view; 1920×1080 is offered only when supported.
+- [ ] **P0.17 Complete persistence and assets.** Persist viewport, nodes, edges, prompts, specs, settings, revisions, artifacts, renders, and known provider jobs in IndexedDB without localStorage blobs. Acceptance: refresh/reopen restores the full Terraced Tower board and both branches.
+- [ ] **P0.18 Meshy async lifecycle.** Add protected paid-request confirmation, create/status/stream-or-poll/cancel where supported, normalized pending/running/completed/failed/timeout/rate-limit states, reload-safe jobs, GLB ingestion, and signed-URL expiry handling. Acceptance: mocked documented-contract tests pass; a real-key result is separately recorded as verified or unverified.
+- [ ] **P0.19 Robust states and performance.** Add loading, empty, invalid geometry, persistence failure, provider failure, missing credential, unsupported WebGL, and recovery UI; add WebGL error boundary, mesh limits, throttling, and GPU cleanup verification.
+- [ ] **P0.20 Acceptance automation.** Add component and Playwright coverage for generate, inspect, edit, branch, render, GLB, persistence, missing credentials, provider lifecycle, and production regression. Acceptance: all ten scenarios in `PRODUCT_REQUIREMENTS.md` pass and key screenshots are retained.
+- [ ] **P0.21 Portfolio completion.** Ship Terraced Tower Study with two saved variations/render plus two distinct typology presets; finish first-run copy, responsive/accessibility review, and README architecture/setup/credentials/tests/deploy/limitations/independence sections.
+
+## P1 — Post-MVP capabilities
+
+- [ ] **P1.01 Supabase sync.** Add optional authenticated project/database and asset-storage sync without weakening local-first behavior.
+- [ ] **P1.02 Second hosted provider.** Add Tripo or equivalent behind the provider-neutral job/asset interface.
+- [ ] **P1.03 GLB import.** Support tightly scoped user model/reference upload with validation and clear editing limits.
+- [ ] **P1.04 Advanced presentation.** Add richer materials, environments, side-by-side comparisons, and higher-quality rendering controls.
+- [ ] **P1.05 Observability and deployment.** Add opt-in privacy-preserving diagnostics plus deployment, rollback, and provider-cost runbooks.
+
+## Explicitly deferred
+
+Video, general image-generation/editing, training/data collection, BIM/full CAD, structural analysis, Rhino/Revit/Grasshopper plugins, multiplayer, payments, and model marketplaces remain out of scope while any P0 item is open.
+
