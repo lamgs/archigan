@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Codex — Tencent AI3D native contract cross-check
+
+- The user-provided `https://www.tencentcloud.com/products/ai3d` page is blocked by the enforced Envoy proxy (`403 Forbidden` at CONNECT), like the fal.ai/Tripo/Meshy documentation hosts.
+- Reached Tencent's official international Go SDK mirror on GitHub instead (`TencentCloud/tencentcloud-sdk-go-intl-en`, `ai3d/v20250513`, release `v3.0.1501`). It documents native `SubmitHunyuanTo3DProJob` / `QueryHunyuanTo3DProJob`: prompt up to 1024 UTF-8 characters; PBR flag; face-count default/range; generation type; `WAIT/RUN/FAIL/DONE`; `ResultFile3Ds` URLs; 24-hour validity; three concurrent tasks.
+- This is useful upstream evidence but is not fal.ai's contract. It does not resolve Rapid behavior, fal queue route construction, snake_case option/output fields, error envelopes, cancellation, or price. No adapter/test changed and both Hunyuan providers remain `verified:false`.
+- Checks: not rerun because this continuation changes documentation only; the immediately preceding commit passed lint, `tsc --noEmit`, 308 Vitest tests, production build, and all 28 Playwright tests.
+- Next: obtain the fal.ai endpoint reference or run the authorized real-account smoke test before changing Hunyuan normalization or verification status.
+
 ## 2026-10-08 — Codex — vendor docs rechecked; contracts still blocked and unverified
 
 - Started from remote `claude/intelligent-ritchie-3zzcsl` head `fde122a`; read the required product/status/task/decision/architecture/handoff material before changes.
