@@ -4,7 +4,7 @@
 
 - **Project:** `archigan`
 - **Team:** `gabelam` (owner-confirmed 2026-10-08; earlier docs said `booth-os`, which is now outdated)
-- **Deployment URL:** <https://archigan-ctjx7uh6t-booth-os.vercel.app> (recorded under the old `booth-os` scope; re-check the current URL in the `gabelam` dashboard)
+- **Production domain:** <https://archigan.vercel.app> (stable alias, owner-confirmed 2026-10-08). Per-deployment URLs such as `archigan-<hash>-….vercel.app` change on every build; do not record them here. Take a specific deployment's URL from the dashboard or the commit status `target_url` only when inspecting that build.
 - **Dashboard:** <https://vercel.com/gabelam/archigan>
 - **Recorded:** 2026-10-08
 
@@ -95,7 +95,7 @@ From a Vercel-authenticated environment with access to `gabelam`:
 ```bash
 vercel --scope gabelam project inspect archigan
 vercel --scope gabelam inspect archigan-ctjx7uh6t-booth-os.vercel.app
-vercel curl https://archigan-ctjx7uh6t-booth-os.vercel.app/
+vercel curl https://archigan.vercel.app/
 ```
 
 Then verify:
