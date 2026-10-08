@@ -1,6 +1,6 @@
 /** Provider-neutral server-side contract for hosted 3D generation. Provider payloads never leave src/lib/providers. */
 
-export const HOSTED_PROVIDER_IDS = ["meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro"] as const;
+export const HOSTED_PROVIDER_IDS = ["meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro", "tencent-rapid", "tencent-pro"] as const;
 export type HostedProviderId = (typeof HOSTED_PROVIDER_IDS)[number];
 
 export const REQUEST_TIMEOUT_MS = 15_000;

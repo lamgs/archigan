@@ -11,12 +11,14 @@ export const PROVIDER_META: Record<Provider, ProviderMeta> = {
   procedural: { id: "procedural", label: "Local procedural", costLabel: "free", supportsCancel: false },
   "hunyuan3d-rapid": { id: "hunyuan3d-rapid", label: "Hunyuan3D Rapid", costLabel: "unconfirmed", supportsCancel: true, enabledVar: "HUNYUAN_ENABLED", keyVar: "FAL_KEY" },
   "hunyuan3d-pro": { id: "hunyuan3d-pro", label: "Hunyuan3D Pro", costLabel: "unconfirmed", supportsCancel: true, enabledVar: "HUNYUAN_ENABLED", keyVar: "FAL_KEY" },
+  "tencent-rapid": { id: "tencent-rapid", label: "HY 3D Rapid (Tencent)", costLabel: "unconfirmed", supportsCancel: false, enabledVar: "TENCENT_HY3D_ENABLED", keyVar: "TENCENT_SECRET_KEY" },
+  "tencent-pro": { id: "tencent-pro", label: "HY 3D Pro (Tencent)", costLabel: "unconfirmed", supportsCancel: false, enabledVar: "TENCENT_HY3D_ENABLED", keyVar: "TENCENT_SECRET_KEY" },
   tripo: { id: "tripo", label: "Tripo", costLabel: "unconfirmed", supportsCancel: false, enabledVar: "TRIPO_ENABLED", keyVar: "TRIPO_API_KEY" },
   meshy: { id: "meshy", label: "Meshy", costLabel: "≈ 20 credits (≈ $0.40+) — estimate, plan-dependent", supportsCancel: true, enabledVar: "MESHY_ENABLED", keyVar: "MESHY_API_KEY" },
 };
 
 /** Order shown in the picker. */
-export const PICKER_ORDER: Provider[] = ["procedural", "hunyuan3d-rapid", "hunyuan3d-pro", "tripo", "meshy"];
+export const PICKER_ORDER: Provider[] = ["procedural", "hunyuan3d-rapid", "hunyuan3d-pro", "tencent-rapid", "tencent-pro", "tripo", "meshy"];
 
 export type CatalogEntry = { label?: string; costLabel?: string; supportsCancel?: boolean; configured?: boolean; enabled?: boolean; hasKey?: boolean; accessCodeRequired?: boolean; verified?: boolean };
 export type ProviderCatalog = Partial<Record<Provider, CatalogEntry>>;

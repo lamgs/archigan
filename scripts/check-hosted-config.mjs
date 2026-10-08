@@ -5,6 +5,7 @@
 
 const PROVIDERS = [
   { id: "hunyuan3d-rapid/pro", label: "Hunyuan3D via fal.ai", flag: "HUNYUAN_ENABLED", keys: ["FAL_KEY"] },
+  { id: "tencent-rapid/pro", label: "HY 3D via Tencent Cloud", flag: "TENCENT_HY3D_ENABLED", keys: ["TENCENT_SECRET_ID", "TENCENT_SECRET_KEY"] },
   { id: "tripo", label: "Tripo", flag: "TRIPO_ENABLED", keys: ["TRIPO_API_KEY"] },
   { id: "meshy", label: "Meshy", flag: "MESHY_ENABLED", keys: ["MESHY_API_KEY"] },
 ];

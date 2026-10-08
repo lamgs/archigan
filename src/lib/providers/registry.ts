@@ -1,5 +1,6 @@
 import { hunyuanProProvider, hunyuanRapidProvider } from "./hunyuan";
 import { meshyProvider } from "./meshy";
+import { tencentProProvider, tencentRapidProvider } from "./tencent";
 import { tripoProvider } from "./tripo";
 import { HOSTED_PROVIDER_IDS, type HostedProvider, type HostedProviderId } from "./types";
 
@@ -8,6 +9,8 @@ const PROVIDERS: Record<HostedProviderId, HostedProvider> = {
   tripo: tripoProvider,
   "hunyuan3d-rapid": hunyuanRapidProvider,
   "hunyuan3d-pro": hunyuanProProvider,
+  "tencent-rapid": tencentRapidProvider,
+  "tencent-pro": tencentProProvider,
 };
 
 export const isHostedProviderId = (value: unknown): value is HostedProviderId => typeof value === "string" && (HOSTED_PROVIDER_IDS as readonly string[]).includes(value);

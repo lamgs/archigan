@@ -13,6 +13,8 @@ const ENV: Record<HostedProviderId, Record<string, string>> = {
   tripo: { TRIPO_ENABLED: "true", TRIPO_API_KEY: "k-tripo" },
   "hunyuan3d-rapid": { HUNYUAN_ENABLED: "true", FAL_KEY: "k-fal" },
   "hunyuan3d-pro": { HUNYUAN_ENABLED: "true", FAL_KEY: "k-fal" },
+  "tencent-rapid": { TENCENT_HY3D_ENABLED: "true", TENCENT_SECRET_KEY: "k-tencent", TENCENT_SECRET_ID: "id-tencent" },
+  "tencent-pro": { TENCENT_HY3D_ENABLED: "true", TENCENT_SECRET_KEY: "k-tencent", TENCENT_SECRET_ID: "id-tencent" },
 };
 const setEnv = (env: Record<string, string>) => Object.entries(env).forEach(([k, v]) => vi.stubEnv(k, v));
 const post = (provider: string, headers: Record<string, string> = {}, extra: object = {}) => new Request("http://localhost/api/generate", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify({ prompt: "A terraced tower", refinement: "", provider, confirmSpend: true, ...extra }) });
@@ -122,6 +124,6 @@ describe("GET /api/providers", () => {
     for (const id of HOSTED_PROVIDER_IDS) expect(body[id]).toMatchObject({ verified: false, label: expect.any(String), costLabel: expect.any(String) });
     expect(body.meshy.configured).toBe(true);
     expect(body.tripo.configured).toBe(false);
-    ["k-meshy", "k-tripo", "k-fal", "letmein"].forEach((secret) => expect(text).not.toContain(secret));
+    ["k-meshy", "k-tripo", "k-fal", "k-tencent", "id-tencent", "letmein"].forEach((secret) => expect(text).not.toContain(secret));
   });
 });
