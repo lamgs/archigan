@@ -1,7 +1,7 @@
 # Current status
 
-**Updated:** 2026-10-09  
-**Branch:** `claude/determined-sagan-v8sy6v` (work after merged PR #1; see git for clean/dirty state)  
+**Updated:** 2026-10-09 (P1.02 added)  
+**Branch:** `claude/intelligent-ritchie-3zzcsl` (based on `claude/determined-sagan-v8sy6v`) (work after merged PR #1; see git for clean/dirty state)  
 **Milestone:** All P0 tasks implemented; **P0 gate review completed — PASS with documented exceptions** (below)  
 **Overall:** Complete local-first MVP candidate. **By owner decision (2026-10-09), exceptions E1–E4 remain OUTSTANDING and the MVP is NOT declared complete.** Do not mark it complete, and do not start P1 work, until the owner says otherwise.
 
@@ -90,7 +90,7 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Verification
 
-- `npm run test`: passed, 17 files / 194 unit+component tests; 25 Playwright e2e tests (11 acceptance incl. render/viewer parity, 4 portfolio, 4 responsive, 4 undo, 2 security).
+- `npm run test`: passed, 21 files / 308 unit+component+route tests; 28 Playwright e2e tests (scenario 9 now runs once per hosted provider). Verified 2026-10-08 from a fresh clone of the remote branch: `npm ci` → lint → tsc → vitest → production build → Playwright → `npm audit` (0 vulnerabilities). All mocked; no live provider call.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
