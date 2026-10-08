@@ -40,6 +40,7 @@ For application changes, run:
 npm run test
 npm run lint
 npm run build
+npm run test:e2e   # when UI, persistence, viewer, or provider flows change
 ```
 
 If a check cannot run, record the exact reason in `docs/STATUS.md` and the newest handoff entry.

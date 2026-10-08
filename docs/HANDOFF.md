@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.20 acceptance automation
+
+- Added `@playwright/test`, `@axe-core/playwright`, jsdom + Testing Library (dev deps; `npm audit` clean), `playwright.config.ts` (production build via `next start`, container Chromium auto-detected), `e2e/helpers.ts` (IDB reader, canvas fingerprint, PNG decoder, minimal GLB builder, hosted-API fake, error watcher) and `e2e/acceptance.spec.ts` with one test per PRD scenario; `npm run test:e2e` / `test:all`; evidence screenshots + rendered PNGs in `docs/evidence/`.
+- Findings fixed along the way: `--muted` text colour failed WCAG AA (4.27:1) → darkened; “Add next” label on the dark Generation node was ~2:1 → fixed; stale Model-inspector copy updated. Test-side races fixed (dashboard sample vs saved card while loading; reload inside the 900 ms autosave window).
+- Checks: lint clean, tsc clean, build passes, 180 unit/component tests, 10/10 e2e (stable over repeated runs, ~47 s).
+- Honest limits: scenario 9 is a mocked contract (live Meshy unverified); WebGL on SwiftShader only; no CI workflow committed; GLB scenario compares triangle/mesh counts and bounds with `computeLayout`, not pixel parity with the viewer.
+- Next: P0.21 portfolio completion, then the P0 gate review.
+
 ## 2026-10-09 — Claude — P0.19 robust states and performance
 
 - Added `limits.ts` (triangle/mesh budgets; enforced in `applyEdit`, viewer, GLB export; hosted GLB triangle cap), `backup.ts` (JSON export/import with validation, id-collision copy, missing-asset warnings), `probeStorage`, `viewer-fallback.tsx` (`ViewerFallback`, `ViewerBoundary`), `app/error.tsx`; viewer now probes WebGL, handles context loss with a restore button, uses `frameloop="demand"`, dpr cap, content-keyed spec (stops needless rebuilds on every autosave), PNG error feedback, GPU diagnostics hook `window.__siftGpu` (counts only). Banner for storage unavailable/save failed with Download backup / Retry save; dashboard “Import backup”.

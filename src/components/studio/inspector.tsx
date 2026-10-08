@@ -247,7 +247,7 @@ export function Inspector({ node, spec, blockedMessage, provider, meshyConfigure
             </fieldset>
           )}
           {node && (node.type === "generation" || node.type === "variation") && !spec && <p className="inspector__hint">{blockedMessage || "Run the generation to unlock geometry controls."}</p>}
-          {node?.type === "model" && <p className="inspector__hint">This node displays the upstream model. Edit geometry on its Generation or Variation node. Camera presets and view modes arrive with the expanded viewer.</p>}
+          {node?.type === "model" && <p className="inspector__hint">This node displays the upstream model. Edit geometry on its Generation or Variation node; camera presets and display modes are in the viewer toolbar.</p>}
           {node?.type === "render" && <RenderPanel state={render} canRender={canRender} onSetting={onRenderSetting} onRender={onRender} />}
         </div>
       )}

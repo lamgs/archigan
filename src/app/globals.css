@@ -3,7 +3,7 @@
   --paper-deep: #ddd7ca;
   --panel: #f7f4ed;
   --ink: #242321;
-  --muted: #706c65;
+  --muted: #5c5851;
   --line: #c9c2b5;
   --accent: #8f2f24;
   --accent-bright: #b84938;
@@ -277,3 +277,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 
 .dashboard__header-actions { display: flex; align-items: flex-end; gap: 12px; }
 .dashboard__import { cursor: pointer; }
+
+/* Contrast fixes found by axe: labels inside dark (generation) nodes must not use the light-theme muted colour. */
+.studio-node--generation .node-next span { color: #d6cfc2; font-size: 9px; }
+.studio-node--generation .node-next { border-top-color: #56534d; }
+.studio-node--generation .node-note { color: #f0c987; }

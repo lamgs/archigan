@@ -9,3 +9,5 @@ npm-debug.log*
 *.tsbuildinfo
 .DS_Store
 
+test-results/
+playwright-report/

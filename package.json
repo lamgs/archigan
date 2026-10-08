@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && playwright test",
+    "test:all": "npm run lint && npm run test && npm run test:e2e"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.1",
@@ -22,6 +24,10 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.64.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^26.6.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -29,6 +35,7 @@
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
+    "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.1",
     "vitest": "^5.0.3"

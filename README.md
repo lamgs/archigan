@@ -22,6 +22,14 @@ npm run lint
 npm run build
 ```
 
+End-to-end acceptance tests (Playwright, against the **production build**) cover the ten scenarios in `docs/PRODUCT_REQUIREMENTS.md`, including axe accessibility scans, and write evidence screenshots to `docs/evidence/`:
+
+```bash
+npm run test:e2e   # builds, starts `next start` on :3200, runs e2e/*.spec.ts
+```
+
+In containers with a pre-installed Chromium it is used automatically (`/opt/pw-browsers/chromium`, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`); elsewhere run `npx playwright install chromium` first. Hosted-provider tests use a **mocked** API and never call Meshy.
+
 Project coordination lives in [`AGENTS.md`](./AGENTS.md), with current state in [`docs/STATUS.md`](./docs/STATUS.md) and prioritized acceptance criteria in [`docs/TASKS.md`](./docs/TASKS.md).
 
 ## Optional Meshy provider

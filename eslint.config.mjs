@@ -14,5 +14,9 @@ export default tseslint.config(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    // End-to-end tests read raw, untyped IndexedDB records and browser state; `any` there is deliberate.
+    files: ["e2e/**/*.ts", "playwright.config.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
 );
-
