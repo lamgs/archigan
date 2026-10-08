@@ -31,15 +31,15 @@ describe("config", () => {
 });
 
 describe("create", () => {
-  it("POSTs text_to_model with bearer key and returns the task id", async () => {
+  it("POSTs to the v3 text-to-model endpoint with a bearer key and returns the task id", async () => {
     const f = vi.fn(async (..._a: unknown[]) => json({ code: 0, data: { task_id: ID } }));
     await expect(tripoProvider.create("A tower", "with terraces", asFetch(f))).resolves.toBe(ID);
     const [url, init] = f.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(`${TRIPO_BASE_URL}/task`);
+    expect(url).toBe(`${TRIPO_BASE_URL}/generation/text-to-model`);
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tr_secret_key");
     const body = JSON.parse(String(init.body));
-    expect(body.type).toBe("text_to_model");
+    expect(body).not.toHaveProperty("type");
     expect(body.prompt).toMatch(/a tower with terraces/);
     expect(body.prompt.length).toBeLessThanOrEqual(1024);
   });
@@ -65,17 +65,18 @@ describe("status mapping", () => {
   it.each([["queued", "queued"], ["running", "running"], ["cancelled", "cancelled"]] as const)("maps %s", async (raw, expected) => {
     await expect(statusOf({ status: raw, progress: 41.6 })).resolves.toMatchObject({ providerTaskId: ID, status: expected, progress: 42 });
   });
-  it("requests GET /task/{id}", async () => {
+  it("requests the v3 GET /tasks/{id} endpoint", async () => {
     const f = vi.fn(async (..._a: unknown[]) => task({ status: "running" }));
     await tripoProvider.status(ID, asFetch(f));
-    expect(f.mock.calls[0][0]).toBe(`${TRIPO_BASE_URL}/task/${ID}`);
+    expect(f.mock.calls[0][0]).toBe(`${TRIPO_BASE_URL}/tasks/${ID}`);
     expect((f.mock.calls[0][1] as RequestInit).method).toBe("GET");
   });
-  it("success yields glbUrl from each output shape, preferring pbr_model", async () => {
+  it("success accepts v3 and legacy output shapes, preferring v3 model_url", async () => {
     const u = (n: string) => `https://tripo-data.rg1.data.tripo3d.com/${n}.glb`;
-    await expect(statusOf({ status: "success", progress: 100, output: { pbr_model: u("pbr"), model: u("m") } })).resolves.toMatchObject({ status: "completed", glbUrl: u("pbr") });
+    await expect(statusOf({ status: "success", progress: 100, output: { model_url: u("v3"), pbr_model: u("pbr"), model: u("m") } })).resolves.toMatchObject({ status: "completed", glbUrl: u("v3") });
     await expect(statusOf({ status: "success", output: { model: u("m") } })).resolves.toMatchObject({ status: "completed", glbUrl: u("m"), progress: 100 });
     await expect(statusOf({ status: "success", output: { model_url: u("mu") } })).resolves.toMatchObject({ glbUrl: u("mu") });
+    await expect(statusOf({ status: "success", output: { model_urls: [u("list")] } })).resolves.toMatchObject({ glbUrl: u("list") });
     await expect(statusOf({ status: "success", output: { pbr_model: { url: u("obj") } } })).resolves.toMatchObject({ glbUrl: u("obj") });
   });
   it("parses an Expires epoch-seconds query param only when present", async () => {
@@ -118,7 +119,7 @@ describe("errors", () => {
   it("maps non-zero envelope codes", async () => {
     const env = (code: number) => asFetch(async () => json({ code, message: "x" }));
     await expect(tripoProvider.create("x tower", "", env(2010))).rejects.toMatchObject({ code: "insufficient-credits", retryable: false });
-    await expect(tripoProvider.create("x tower", "", env(2000))).rejects.toMatchObject({ code: "rate-limited", retryable: true });
+    await expect(tripoProvider.create("x tower", "", env(2000))).rejects.toMatchObject({ code: "provider-error", retryable: false });
     await expect(tripoProvider.status(ID, env(1234))).rejects.toMatchObject({ code: "provider-error", retryable: false });
   });
   it("never leaks the API key in error messages", async () => {

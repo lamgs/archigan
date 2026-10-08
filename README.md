@@ -55,7 +55,7 @@ Hosted generation is **off by default** and fails closed, per provider. A provid
 | `SIFT_ACCESS_CODE` | Secret users must type before any paid request (`MESHY_ACCESS_CODE` still works as a fallback). Anyone who has it can spend credits on every enabled provider |
 | `SIFT_DAILY_LIMIT` | Optional per-instance daily cap, counted across all providers (default 20; `MESHY_DAILY_LIMIT` fallback) |
 
-Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All three hosted integrations are unverified:** they were written from vendor documentation summaries (the fal.ai and Tripo docs were unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
+Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All three hosted integrations are unverified:** fal.ai and Meshy still rely on incomplete public evidence, while Tripo follows its official JS/TS SDK's v3 contract; none has been exercised against a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
 
 ## Tests
 

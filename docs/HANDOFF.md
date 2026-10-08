@@ -2,6 +2,16 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Codex — Tripo migrated to official v3 contract
+
+- The user-provided `https://developers.tripo3d.ai/en/docs` page and the previously checked Tripo documentation hosts are blocked by the enforced Envoy proxy (`403 Forbidden` at CONNECT).
+- Initially found the older official Python SDK's v2 compatibility path. After the owner flagged v2 deprecation, found the newer official JS/TS SDK (`@vastai/tripo-sdk` v0.3.0, `VAST-AI-Research/tripo-js-sdk`, commit `caa42b9`), which explicitly targets v3 rather than `/v2/openapi/task`.
+- Migrated Tripo to `https://openapi.tripo3d.ai/v3`, `POST /generation/text-to-model`, `GET /tasks/{id}`, and primary `output.model_url`; kept documented legacy output fallbacks. Code 2010 remains the confirmed insufficient-credit mapping; the unsupported assumption that 2000 means rate limiting was removed. The SDK exposes no cancel operation.
+- Mutation checks: the updated v3 URL/output/error expectations failed in four places against the old adapter, and the v3 request-body expectation separately failed while the legacy `type` field remained. All 30 focused Tripo tests passed after both fixes.
+- Still unresolved: prompt limit, signed-asset host guarantee, pricing, non-2010 envelope-code meanings, and all real-account behavior. Tripo remains `verified:false`; no key was used and no paid call was made.
+- Checks after the v3 migration: lint, `tsc --noEmit`, 308 Vitest tests, production build, and all 28 Playwright tests passed.
+- Next: run the authorized DEPLOYMENT smoke test with a throwaway low-credit key before changing verification status; compare raw error envelopes and signed asset URLs in particular.
+
 ## 2026-10-08 — Codex — Tencent AI3D native contract cross-check
 
 - The user-provided `https://www.tencentcloud.com/products/ai3d` page is blocked by the enforced Envoy proxy (`403 Forbidden` at CONNECT), like the fal.ai/Tripo/Meshy documentation hosts.
