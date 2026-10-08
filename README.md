@@ -32,7 +32,7 @@ Browser (Next.js App Router client)
   3D viewer (R3F) ───┘          src/lib/typologies.ts    prompt → BuildingSpec (local interpreter)
         │                       src/lib/contracts.ts     Zod schemas = compatibility boundary (schema v2)
         ├── src/lib/storage.ts ─▶ IndexedDB (projects + binary assets); the only persistence dependency
-        └── /api/generate/*   ─▶ src/lib/providers/*  server-only Meshy adapter + spend guard
+        └── /api/generate/*   ─▶ src/lib/providers/*  server-only provider adapters (Hunyuan3D, Tripo, Meshy) + spend guard
 ```
 
 - **Immutable artifacts.** Building specs, renders, and hosted GLBs are artifacts; edits create child artifacts linked by revisions. Jobs (execution state) are kept separate.
@@ -42,16 +42,20 @@ Browser (Next.js App Router client)
 
 ## Credentials (optional hosted generation)
 
-Hosted generation is **off by default** and fails closed. To enable Meshy, set all of these on the **server** (copy `.env.example` to `.env.local`):
+Hosted generation is **off by default** and fails closed, per provider. A provider is enabled only if its own flag **and** key are set **and** a shared access code is set (copy `.env.example` to `.env.local`):
 
-| Variable | Purpose |
+| Provider | Flag | Key |
+| --- | --- | --- |
+| Hunyuan3D via fal.ai (Rapid and Pro) | `HUNYUAN_ENABLED=true` | `FAL_KEY` |
+| Tripo | `TRIPO_ENABLED=true` | `TRIPO_API_KEY` |
+| Meshy | `MESHY_ENABLED=true` | `MESHY_API_KEY` |
+
+| Shared variable | Purpose |
 | --- | --- |
-| `MESHY_ENABLED=true` | Master switch |
-| `MESHY_API_KEY` | Your Meshy key — server-only, never exposed to the browser (never use a `NEXT_PUBLIC_` prefix) |
-| `MESHY_ACCESS_CODE` | Shared secret users must type before any paid request; anyone who has it can spend your credits |
-| `MESHY_DAILY_LIMIT` | Optional per-instance daily cap (default 20) |
+| `SIFT_ACCESS_CODE` | Secret users must type before any paid request (`MESHY_ACCESS_CODE` still works as a fallback). Anyone who has it can spend credits on every enabled provider |
+| `SIFT_DAILY_LIMIT` | Optional per-instance daily cap, counted across all providers (default 20; `MESHY_DAILY_LIMIT` fallback) |
 
-Users also confirm each paid request in a dialog that names Meshy. The integration follows Meshy's public documentation but has **not been exercised against a live account**, so it is reported as *unverified* everywhere (see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the manual smoke test). Hosted results are fixed meshes — viewable and downloadable, not editable.
+Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All three hosted integrations are unverified:** they were written from vendor documentation summaries (the fal.ai and Tripo docs were unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
 
 ## Tests
 
@@ -72,7 +76,7 @@ Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framewo
 
 - Conceptual massing only; the local interpreter understands a fixed vocabulary of keywords (listed in the app) and ignores other words.
 - Storage is per browser: clearing site data, private browsing, or switching device loses projects unless you downloaded a backup (backups exclude render images and hosted models).
-- Hosted generation is unverified live, produces non-editable meshes, and cannot cancel a running Meshy task.
+- Hosted generation is unverified live, produces non-editable meshes, and cannot cancel running hosted tasks (Tripo has no known cancel).
 - Tested in Chromium on software rendering only; other browsers, mobile GPUs, and the 1920×1080 availability heuristic are not independently verified.
 - Courtyard voids and vertical/grid facade fin detail are not modelled.
 

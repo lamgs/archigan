@@ -32,27 +32,29 @@ GitHub commit statuses (context `Vercel`) show every deployment since `f43fc44` 
 
 Mitigation: `vercel.json` pins `framework: nextjs`, `npm ci`, `npm run build`, and sets `outputDirectory` to `.next`. If the next deployment still fails, run `npx vercel inspect <dpl_id> --logs` (id is in the failing commit status `target_url`) and append the error here. Also check Project Settings → General: Framework Preset = Next.js, Root Directory empty, Node.js version 20.x–24.x.
 
-## Hosted generation (Meshy) — configuration and manual live smoke test
+## Hosted generation (Hunyuan3D, Tripo, Meshy) — configuration and manual live smoke test
 
-Hosted generation is **disabled unless all of these server variables are set** (it fails closed):
+Each hosted provider is **disabled unless its own flag and key AND the shared access code are set** (fail closed). Setting one provider never enables another.
 
 ```text
-MESHY_ENABLED=true
-MESHY_API_KEY=<server-only secret>
-MESHY_ACCESS_CODE=<shared secret users type before any paid request; anyone with it can spend credits>
-MESHY_DAILY_LIMIT=20   # optional, per server instance
+SIFT_ACCESS_CODE=<shared secret users type before any paid request; anyone with it can spend credits on every enabled provider>
+SIFT_DAILY_LIMIT=20        # optional, per server instance, counted across ALL providers
+MESHY_ENABLED=true         MESHY_API_KEY=<server-only secret>
+TRIPO_ENABLED=true         TRIPO_API_KEY=<server-only secret>
+HUNYUAN_ENABLED=true       FAL_KEY=<server-only secret>     # enables Hunyuan3D Rapid and Pro
 ```
 
-Routes: `POST /api/generate` (needs `x-sift-access-code` + `confirmSpend: true`), `GET|DELETE /api/generate/{taskId}` (status / cancel), `GET /api/generate/{taskId}/model` (GLB ingest; only HTTPS `*.meshy.ai` URLs are fetched). Cancel works only for queued tasks; Meshy answers 409 for running ones and the UI says so.
+`MESHY_ACCESS_CODE` / `MESHY_DAILY_LIMIT` remain accepted as fallbacks. Routes: `POST /api/generate` (body `provider`, `confirmSpend: true`; header `x-sift-access-code`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (status / cancel), `GET /api/generate/{taskId}/model?provider=<id>` (GLB ingest; only HTTPS hosts on the provider's allowlist are fetched, redirects refused, 100 MB cap, `glTF` magic check), `GET /api/providers` (secret-free catalog). Provider ids: `meshy`, `tripo`, `hunyuan3d-rapid`, `hunyuan3d-pro`.
 
-**Status: UNVERIFIED.** Only mocked documented-contract tests exist. To record a real result, use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
+**Status: ALL UNVERIFIED.** Only mocked documented-contract tests exist; vendor docs for fal.ai and Tripo (and Meshy) were unreachable when the adapters were written. For each provider, use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
 
-1. Create task: `POST /api/generate` returns 202 with a task id; Meshy dashboard shows the task.
-2. Status: `GET /api/generate/{id}` transitions queued → running (progress rises) → completed; compare the raw Meshy JSON with `normalizeTask` (`model_urls.glb`, `task_error.message`, `expires_at` field names are **unconfirmed**).
-3. Ingest: `/model` returns a GLB that opens in the viewer and downloads.
-4. Cancel: DELETE on a queued task succeeds; on a running task returns 409 (`running`).
+1. Create task: `POST /api/generate` returns 202 with a task id; the vendor dashboard shows the task.
+2. Status: `GET /api/generate/{id}?provider=…` transitions queued → running → completed; compare the raw vendor JSON with the adapter's normalizer. **Unconfirmed names:** Meshy `model_urls.glb`, `task_error.message`, `expires_at`; Tripo base URL/path (v2 `/task` vs v3 per-capability endpoints), body fields, `output.pbr_model|model|model_url`, envelope error codes; fal endpoint ids, the app-id form of status/result/cancel URLs, `model_glb` / `model_urls.glb`, Rapid `enable_pbr`/`enable_geometry`, Pro `face_count`, prompt limits, the 403 balance wording, and the signed-asset hosts (`fal.media`, `tripo3d.com|ai`).
+3. Ingest: `/model` returns a GLB that opens in the viewer and downloads (fal Rapid may return OBJ — the app rejects non-GLB).
+4. Cancel: Meshy DELETE on a queued task succeeds (409 when running); fal cancel via `PUT …/cancel`; Tripo has no known cancel (the app only stops waiting).
 5. Failure paths: bad key → `auth`; empty credits → `insufficient-credits`; rapid requests → 429 handling.
 6. Reload mid-task: the job resumes after re-entering the access code.
+7. Record the real per-generation price; correct the approximate cost labels in `src/lib/providers/*.ts` and `src/lib/provider-meta.ts` (Tripo's is currently "not confirmed").
 
 ## Release, rollback, and cost runbook
 
@@ -63,7 +65,7 @@ Routes: `POST /api/generate` (needs `x-sift-access-code` + `confirmSpend: true`)
 
 **Rollback.** Vercel → Project → Deployments → pick the last good deployment → *Promote to Production* (or `vercel rollback`), or revert the commit on `main`. User data is not at risk: projects live in each visitor's browser, not on the server. Compatibility rule that makes rollback safe: stored data is only ever *read forward* — never remove read support for schema v1/v2; a future v3 must migrate on read and must not rewrite records in a way an older build cannot open.
 
-**Provider cost control (Meshy).** A paid request needs the server-side `MESHY_ACCESS_CODE`, an explicit user confirmation, and passes per-IP (3 per 10 min) and daily (`MESHY_DAILY_LIMIT`, default 20) limits. The limiter is per server instance, so worst-case daily spend is *limit × warm instances* — also set a spend cap/alerts in the Meshy account itself. To stop spending immediately: set `MESHY_ENABLED=false` (or delete `MESHY_API_KEY`) and redeploy; hosted calls then fail closed with 503. To revoke a leaked access code: change `MESHY_ACCESS_CODE` and redeploy. If the API key may have leaked: rotate it in Meshy first, then update the env var. Review Meshy's usage dashboard after any public sharing of the code.
+**Provider cost control (all hosted providers).** A paid request needs the server-side `SIFT_ACCESS_CODE`, the provider's own flag and key, an explicit user confirmation naming the selected provider, and passes per-IP (3 per 10 min) and daily (`SIFT_DAILY_LIMIT`, default 20) limits that are shared across providers. The limiter is per server instance, so worst-case daily spend is *limit × warm instances × the most expensive provider's price* — also set a spend cap/alerts in each vendor account (Meshy, Tripo, fal.ai). Approximate costs shown in the UI are estimates from public pages (Hunyuan3D Rapid ≈ $0.225, Pro ≈ $0.375, Meshy ≈ 20 credits; Tripo unconfirmed) and must be re-checked. To stop **one** provider immediately: set its flag to `false` (or delete its key) and redeploy; calls then fail closed with 503. To stop **all** hosted spending: unset `SIFT_ACCESS_CODE` (and `MESHY_ACCESS_CODE`). To revoke a leaked access code: change it and redeploy. If a key may have leaked: rotate it at the vendor first, then update the env var. Review each vendor's usage dashboard after any public sharing of the code. **Rollback caveat:** projects saved with `tripo` or `hunyuan3d-*` cannot be opened by builds from before ADR-017 (see `DECISIONS.md`).
 
 **Performance budget.** Building meshes are capped at 60 000 triangles / 1 200 draw calls (`src/lib/limits.ts`); hosted GLB previews at 1.5 M triangles; the viewer renders on demand (0 idle frames) with device-pixel-ratio capped at 1.75; offscreen renders are sequential and release their GPU context; autosave is debounced (900 ms). Regressions in these show up as e2e failures (idle-frame and GPU-resource checks are in `docs/STATUS.md` evidence).
 
@@ -72,11 +74,11 @@ Routes: `POST /api/generate` (needs `x-sift-access-code` + `confirmSpend: true`)
 The procedural application requires no secrets. Optional hosted generation requires server-side variables:
 
 ```text
-MESHY_ENABLED=true
-MESHY_API_KEY=<configured in Vercel, never committed>
+SIFT_ACCESS_CODE, plus per provider: MESHY_ENABLED + MESHY_API_KEY, TRIPO_ENABLED + TRIPO_API_KEY, HUNYUAN_ENABLED + FAL_KEY
+(configured in Vercel, never committed)
 ```
 
-Until a real Meshy account test succeeds, the application and status docs must continue to label Meshy as unverified.
+Until a real-account test succeeds for a provider, the application and status docs must continue to label it as unverified.
 
 ## Authorized verification checklist
 
@@ -92,7 +94,7 @@ Then verify:
 
 1. Deployment is `READY` and linked to the intended `main` commit.
 2. Home page renders the canvas and procedural model after protection is satisfied.
-3. `/api/providers` returns procedural configured/verified and an honest Meshy state.
+3. `/api/providers` returns procedural configured/verified and an honest, unverified state for each hosted provider.
 4. Prompt generation, IndexedDB save/reload, PNG, and GLB work on the deployed origin.
 5. Runtime error logs are clean for the smoke-test window.
 6. `STATUS.md` is updated with target, commit, URL, and observed result.
