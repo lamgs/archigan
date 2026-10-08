@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { providerErrorResponse, taskRequest } from "@/lib/providers/hosted-http";
-import { deleteMeshyTask, getMeshyTask } from "@/lib/providers/meshy";
 
 export const dynamic = "force-dynamic";
 
@@ -11,19 +10,19 @@ export async function GET(request: Request, { params }: Context) {
   const checked = await taskRequest(request, params);
   if ("response" in checked) return checked.response;
   try {
-    const { glbUrl, ...task } = await getMeshyTask(checked.taskId);
+    const { glbUrl, ...task } = await checked.provider.status(checked.taskId);
     return NextResponse.json({ task: { ...task, hasModel: Boolean(glbUrl) } });
   } catch (error) {
     return providerErrorResponse(error);
   }
 }
 
-/** Cancels by deleting. Meshy only allows this for queued or finished tasks; a running task answers 409 (`running`). */
+/** Cancels via the provider (where it supports cancel). A task the vendor refuses to cancel answers 409 (`running`). */
 export async function DELETE(request: Request, { params }: Context) {
   const checked = await taskRequest(request, params);
   if ("response" in checked) return checked.response;
   try {
-    await deleteMeshyTask(checked.taskId);
+    await checked.provider.cancel(checked.taskId);
     return NextResponse.json({ ok: true, status: "cancelled" });
   } catch (error) {
     return providerErrorResponse(error);

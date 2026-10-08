@@ -1,4 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
+import { sharedAccessCode } from "./http";
+import { getProvider } from "./registry";
+import type { HostedProviderId } from "./types";
 
 export type SpendLimits = { perIpWindowMs: number; perIpMax: number; dailyMax: number };
 export type GuardResult = { ok: true } | { ok: false; status: number; code: string; message: string; retryAfterSeconds?: number };
@@ -24,7 +27,7 @@ export class SpendLimiter {
     return { ok: true };
   }
 
-  /** Call only after Meshy accepted the request, so failed attempts do not consume the budget. */
+  /** Call only after the provider accepted the request, so failed attempts do not consume the budget. */
   record(ip: string, now: number) {
     this.day.push(now);
     this.perIp.set(ip, [...(this.perIp.get(ip) ?? []), now]);
@@ -32,7 +35,7 @@ export class SpendLimiter {
 }
 
 export function limitsFromEnv(env: Record<string, string | undefined>): SpendLimits {
-  const daily = Number(env.MESHY_DAILY_LIMIT);
+  const daily = Number(env.SIFT_DAILY_LIMIT || env.MESHY_DAILY_LIMIT);
   return { ...DEFAULT_LIMITS, dailyMax: Number.isInteger(daily) && daily > 0 ? daily : DEFAULT_LIMITS.dailyMax };
 }
 
@@ -43,10 +46,10 @@ export function codeMatches(provided: string | null | undefined, expected: strin
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Checks the shared access code (required for every hosted-provider call, including status polling). */
-export function authorize(headers: Headers, env: Record<string, string | undefined>): GuardResult {
-  if (env.MESHY_ENABLED !== "true" || !env.MESHY_API_KEY || !env.MESHY_ACCESS_CODE) return { ok: false, status: 503, code: "not-configured", message: "Hosted generation is not configured on this deployment." };
-  if (!codeMatches(headers.get("x-sift-access-code"), env.MESHY_ACCESS_CODE)) return { ok: false, status: 401, code: "access-denied", message: "A valid access code is required for hosted generation." };
+/** Checks that the provider is fully configured, then the shared access code (required for every hosted call, including polling). */
+export function authorize(headers: Headers, env: Record<string, string | undefined>, provider: HostedProviderId = "meshy"): GuardResult {
+  if (!getProvider(provider).config(env).configured) return { ok: false, status: 503, code: "not-configured", message: "Hosted generation is not configured on this deployment." };
+  if (!codeMatches(headers.get("x-sift-access-code"), sharedAccessCode(env))) return { ok: false, status: 401, code: "access-denied", message: "A valid access code is required for hosted generation." };
   return { ok: true };
 }
 

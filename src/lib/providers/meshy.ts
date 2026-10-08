@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { composeArchitecturalPrompt } from "../massing";
+import { clampProgress, downloadGlbFor, isAllowedHost, mapHttpError as mapVendorHttpError, timedFetch } from "./http";
+import { MAX_GLB_BYTES, ProviderError, type Fetch, type HostedProvider, type JobStatus, type NormalizedTask } from "./types";
+
+export { DOWNLOAD_TIMEOUT_MS, MAX_GLB_BYTES, REQUEST_TIMEOUT_MS } from "./types";
+export type { JobStatus, NormalizedTask, TaskError } from "./types";
 
 /**
  * Meshy Text-to-3D (v2) adapter — server-side only.
@@ -11,24 +16,14 @@ import { composeArchitecturalPrompt } from "../massing";
  * and `meshyStatus().verified` is always false until a real-key smoke test is recorded in docs/DEPLOYMENT.md.
  */
 export const MESHY_URL = "https://api.meshy.ai/openapi/v2/text-to-3d";
-export const REQUEST_TIMEOUT_MS = 15_000;
-export const DOWNLOAD_TIMEOUT_MS = 60_000;
-export const MAX_GLB_BYTES = 100 * 1024 * 1024;
+export const MeshyError = ProviderError;
+export type MeshyError = ProviderError;
+const ASSET_HOSTS = ["meshy.ai"] as const;
 
-export type JobStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "timed-out" | "rate-limited";
-export type TaskError = { code: string; message: string; retryable: boolean };
-export type NormalizedTask = { providerTaskId: string; status: JobStatus; progress?: number; glbUrl?: string; expiresAt?: string; error?: TaskError };
-
-export class MeshyError extends Error {
-  constructor(readonly code: string, message: string, readonly httpStatus: number, readonly retryable: boolean, readonly retryAfterSeconds?: number) {
-    super(message);
-  }
-}
-
-export function meshyStatus() {
-  const enabled = process.env.MESHY_ENABLED === "true";
-  const hasKey = Boolean(process.env.MESHY_API_KEY);
-  const accessCodeRequired = Boolean(process.env.MESHY_ACCESS_CODE);
+export function meshyStatus(env: Record<string, string | undefined> = process.env) {
+  const enabled = env.MESHY_ENABLED === "true";
+  const hasKey = Boolean(env.MESHY_API_KEY);
+  const accessCodeRequired = Boolean(env.SIFT_ACCESS_CODE || env.MESHY_ACCESS_CODE);
   // Fails closed: a key alone is not enough; the deployment must also define who may spend it.
   return { configured: enabled && hasKey && accessCodeRequired, enabled, hasKey, accessCodeRequired, verified: false as const };
 }
@@ -53,7 +48,7 @@ export function normalizeTask(raw: unknown, fallbackId = ""): NormalizedTask {
   const id = task.id ?? fallbackId;
   const status = STATUS_MAP[String(task.status ?? "").toUpperCase()];
   if (!status) return { providerTaskId: id, status: "failed", error: { code: "unknown-status", message: `Meshy reported an unrecognized status “${task.status ?? "none"}”.`, retryable: false } };
-  const progress = task.progress === undefined ? undefined : Math.max(0, Math.min(100, Math.round(task.progress)));
+  const progress = clampProgress(task.progress);
   const glbUrl = task.model_urls?.glb || undefined;
   const expiresAt = task.expires_at ? new Date(task.expires_at).toISOString() : undefined;
   if (status === "failed") return { providerTaskId: id, status, ...(progress !== undefined && { progress }), error: { code: "provider-failed", message: task.task_error?.message || "Meshy could not generate this model.", retryable: true } };
@@ -61,30 +56,12 @@ export function normalizeTask(raw: unknown, fallbackId = ""): NormalizedTask {
   return { providerTaskId: id, status, ...(progress !== undefined && { progress }), ...(glbUrl && { glbUrl }), ...(expiresAt && { expiresAt }) };
 }
 
-export function mapHttpError(status: number, retryAfter?: string | null): MeshyError {
-  const seconds = retryAfter && Number.isFinite(Number(retryAfter)) ? Math.max(1, Math.round(Number(retryAfter))) : undefined;
-  if (status === 401 || status === 403) return new MeshyError("auth", "Meshy rejected the server's API key.", status, false);
-  if (status === 402) return new MeshyError("insufficient-credits", "The Meshy account has no credits left for this request.", status, false);
-  if (status === 404) return new MeshyError("not-found", "Meshy no longer has this task (results are only retained for a limited time).", status, false);
-  if (status === 409) return new MeshyError("running", "Meshy cannot cancel a task that is already running.", status, false);
-  if (status === 429) return new MeshyError("rate-limited", "Meshy is rate limiting requests. Try again shortly.", status, true, seconds ?? 10);
-  if (status === 400 || status === 422) return new MeshyError("rejected", "Meshy rejected this request.", status, false);
-  if (status >= 500) return new MeshyError("provider-unavailable", "Meshy is temporarily unavailable.", status, true, seconds);
-  return new MeshyError("unexpected", `Meshy responded with status ${status}.`, status, false);
-}
-
-type Fetch = typeof fetch;
+export const mapHttpError = (status: number, retryAfter?: string | null) => mapVendorHttpError(status, retryAfter, "Meshy");
 
 async function call(path: string, init: RequestInit, fetchImpl: Fetch): Promise<Response> {
   const key = process.env.MESHY_API_KEY;
   if (!key) throw new MeshyError("not-configured", "Meshy is not configured on the server.", 503, false);
-  let response: Response;
-  try {
-    response = await fetchImpl(`${MESHY_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers }, cache: "no-store", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-  } catch (error) {
-    const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    throw new MeshyError(timeout ? "timeout" : "network", timeout ? "Meshy did not respond in time." : "Could not reach Meshy.", 504, true);
-  }
+  const response = await timedFetch("Meshy", `${MESHY_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers } }, fetchImpl);
   if (!response.ok) throw mapHttpError(response.status, response.headers.get("retry-after"));
   return response;
 }
@@ -106,31 +83,20 @@ export async function deleteMeshyTask(taskId: string, fetchImpl: Fetch = fetch):
   await call(`/${encodeURIComponent(taskId)}`, { method: "DELETE" }, fetchImpl);
 }
 
-/** Only HTTPS URLs on Meshy-owned hosts may be fetched on the user's behalf (prevents the server being used as an open proxy). */
-export function isAllowedAssetUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && (url.hostname === "meshy.ai" || url.hostname.endsWith(".meshy.ai"));
-  } catch {
-    return false;
-  }
-}
+export const isAllowedAssetUrl = (value: string) => isAllowedHost(value, ASSET_HOSTS);
 
 /** Downloads a GLB from a (signed) Meshy URL with a size cap and a magic-number check. */
-export async function downloadGlb(url: string, fetchImpl: Fetch = fetch): Promise<ArrayBuffer> {
-  if (!isAllowedAssetUrl(url)) throw new MeshyError("bad-asset-url", "Meshy returned a model URL this app will not fetch.", 502, false);
-  let response: Response;
-  try {
-    response = await fetchImpl(url, { cache: "no-store", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
-  } catch {
-    throw new MeshyError("network", "Could not download the model from Meshy.", 504, true);
-  }
-  if (response.status === 403 || response.status === 410) throw new MeshyError("asset-expired", "The signed download link has expired. Re-check the task for a fresh link.", response.status, true);
-  if (!response.ok) throw mapHttpError(response.status);
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_GLB_BYTES) throw new MeshyError("too-large", "The model file is too large to import.", 502, false);
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength > MAX_GLB_BYTES) throw new MeshyError("too-large", "The model file is too large to import.", 502, false);
-  if (bytes.byteLength < 12 || new TextDecoder().decode(new Uint8Array(bytes, 0, 4)) !== "glTF") throw new MeshyError("not-glb", "The downloaded file is not a valid GLB.", 502, false);
-  return bytes;
-}
+export const downloadGlb = (url: string, fetchImpl: Fetch = fetch) => downloadGlbFor(meshyProvider, url, fetchImpl);
+
+export const meshyProvider: HostedProvider = {
+  id: "meshy",
+  label: "Meshy",
+  costLabel: "≈ 20 credits (≈ $0.40+) — estimate, plan-dependent",
+  supportsCancel: true,
+  assetHosts: ASSET_HOSTS,
+  maxGlbBytes: MAX_GLB_BYTES,
+  config: meshyStatus,
+  create: (prompt, refinement, fetchImpl) => createMeshyPreview(prompt, refinement, fetchImpl),
+  status: (taskId, fetchImpl) => getMeshyTask(taskId, fetchImpl),
+  cancel: (taskId, fetchImpl) => deleteMeshyTask(taskId, fetchImpl),
+};
