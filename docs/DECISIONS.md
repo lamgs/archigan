@@ -48,6 +48,12 @@ Sift borrows xFigura's spatial workflow clarity, not its broad text/image/video/
 
 The complete Sift 2.0 master brief is distilled in `PRODUCT_REQUIREMENTS.md` and takes precedence over earlier shorthand plans. The existing local vertical slice is a verified foundation, not the completed MVP. MVP status requires validated architectural specifications, direct parameter edits, non-destructive branching, typed artifact lineage, expanded viewer controls, render artifacts, complete restore, provider lifecycle handling, and the ten acceptance scenarios.
 
+## ADR-010 — v2 storage key and legacy-store handling
+
+**Status:** accepted, 2026-10-08
+
+v2 projects persist under `projects-v2`; the legacy `projects-v1` key is read-only and never deleted, so a rollback loses nothing. Records that fail validation are written back untouched instead of dropped. Legacy edges that violate the new port rules are dropped from the migrated graph with a warning (the original stays in `projects-v1`). `BuildingSpec` and the exact legacy `MassingSpec` are held in the building-spec artifact's `metadata` until P0.10 defines geometry storage.
+
 ## ADR-009 — Immutable artifacts and non-destructive revisions
 
 **Status:** accepted, 2026-10-08

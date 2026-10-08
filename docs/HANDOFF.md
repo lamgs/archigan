@@ -2,6 +2,50 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.14 non-destructive branching
+
+- Added `branchFrom`, `commitVariations`, `upstreamArtifactId`, `lineageOf`, `versionsOf`, `restoreVersion` to `workflow.ts`; Branch button on nodes, lane labels, versions fieldset in the inspector; `persist` now snapshots changed variations before saving (also triggered by textarea blur and inspector edits).
+- Checks: test 71/71, lint clean, build passes. Playwright: branch → edit branch B floors, follow-up prompt on branch A → distinct previews → save → reload → identical geometry, labels, 6 nodes / 5 edges, correct per-branch version history; no page errors.
+- Open risks: variation display still derives from its recipe (snapshots are lineage records, not the render source); no UI to delete a branch other than Backspace on nodes (artifacts remain); snapshots accumulate with each recipe change; blur-triggered autosave also saves other pending edits.
+- Next: P0.15 expanded viewer.
+
+## 2026-10-09 — Claude — P0.13 contextual inspector (+ Vercel output directory)
+
+- Added `spec-edit.ts` (typed `SpecEdit`, `applyEdit` validated through `buildingSpecSchema`, replay/merge helpers), `editNodeGeometry` in `workflow.ts`, and `inspector.tsx`; canvas shrinks to make room for the inspector; provider switch moved from the header into the Generation inspector.
+- Vercel: user reported `No Output Directory named "public"`; `vercel.json` now sets `outputDirectory: ".next"`. Commit `b0fc5f3` reports GitHub status `success`; app behavior behind protection still unverified. Recommended: also clear the Output Directory override in Project Settings.
+- Checks: test 63/63, lint clean, build passes. Playwright: per-node inspector contents (no irrelevant controls), generation edit → revision + persisted, invalid edit message, variation edit leaves source unchanged, collapse/expand, reload restores both.
+- Open risks: no UI to browse/restore earlier revisions yet (P0.14); each committed edit on a Generation node adds an artifact (no pruning); inspector volume selector defaults to the first volume.
+- Next: P0.14 branching — show lineage and let a design fork into two visible branches.
+
+## 2026-10-09 — Claude — P0.12 typed executable canvas
+
+- UI moved onto `SiftProjectV2`: new `workflow.ts` (evaluate/connect/add/run/preview), typed handles in `studio-node.tsx`, rewritten `studio-shell.tsx` (add toolbar, Add-next menu, `isValidConnection`, viewport persistence). Storage API is v2-native; v1 samples moved to `legacy-fixtures.ts`; samples/projects are v2.
+- Checks: test 54/54, lint clean, build passes. Playwright: example → Run → preview, contextual Render add, invalid port drag rejected, prompt edit → out-of-date → re-run, pan + save + reload restores viewport/nodes/edges; no page errors.
+- Open risks: prompt dock removed (prompt now lives in the Prompt node); `/api/generate` legacy; render node inert; no per-node delete button (Backspace works).
+- Next: user reported failing Vercel preview deployment — debug first; then P0.13/P0.14.
+
+## 2026-10-09 — Claude — P0.11 project dashboard and CRUD
+
+- Added `dashboard.tsx`, `projects.ts` (name validation, unique names, blank/sample-copy/rename helpers), `deleteProject` with tombstones in `storage.ts`, and `fake-indexeddb` (dev dep) storage tests. Shell now opens on the dashboard; brand/“All projects” returns to it; blank projects show example-brief chips and an empty preview.
+- Checks: test 43/43, lint clean, build passes. Playwright flow verified first run → example → generate (autosave) → rename (incl. blank-name error) → reload → open → delete with confirmation → reload → sample copy; no page errors.
+- Open risks: deletion is permanent; rename uniqueness is checked against loaded list only; `saveProject` of an open project whose record was deleted elsewhere revives it (intended).
+- Next: P0.12 typed canvas (prompt/generation/model/render/variation nodes, port validation in `onConnect` using `graph.ts`, persisted viewport) — this is where the UI should move onto `SiftProjectV2`.
+
+## 2026-10-08 — Claude — P0.10 architectural geometry engine
+
+- Added `geometry.ts` (pure layout), `typologies.ts` (`detectTypology`, `deriveBuildingSpec`, `describeSpec`), `three-building.ts` (mesh builder + disposal); switched `model-preview.tsx` and `studio-shell.tsx` to `BuildingSpec`. `three-massing.ts` is retained but unused.
+- Checks: test 34/34, lint clean, build passes; Playwright screenshots confirmed four visibly distinct typologies, no page errors.
+- Open risks: spec is derived, not persisted; facade vertical/grid and courtyard voids unimplemented; slight shimmer on glazing bands at distance; viewer framing still fixed camera (P0.15).
+- Next: P0.11 dashboard/CRUD, then P0.12–P0.14 to move the UI onto v2 and persist specs.
+
+## 2026-10-08 — Claude — P0.09 canonical contracts and migration
+
+- Added v2 Zod contracts to `contracts.ts`, port/connection/cycle validation in `graph.ts`, and v1→v2 migration plus `toLegacyProject` projection and `reconcileStores` in `migrate.ts`.
+- Hardened `storage.ts`: atomic `update`, no dropping of unreadable records, legacy key kept read-only (fixes the silent-data-loss risk found in review). UI is unchanged.
+- Checks: `npm run test` 20/20, `npm run lint` clean, `npm run build` passes. IndexedDB behavior itself is untested.
+- Open risks: legacy edges that break port rules are dropped on migration (UI `onConnect` still allows arbitrary wiring); `BuildingSpec` from migration is approximate; project list capped at 30.
+- Next: P0.10 geometry engine on `BuildingSpec`; consider adding `fake-indexeddb` tests. Review items not yet addressed: paid Meshy endpoint guard/status route (P0.18), tracked `__pycache__` files.
+
 ## 2026-10-08 — Codex — Vercel deployment recorded
 
 - Recorded the user-created `booth-os/archigan` Vercel project, deployment URL, and dashboard link in `DEPLOYMENT.md` and README.

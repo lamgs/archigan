@@ -1,7 +1,7 @@
 # Current status
 
 **Updated:** 2026-10-08  
-**Branch:** `main` (tracking `origin/main`)  
+**Branch:** `claude/determined-sagan-v8sy6v` (uncommitted P0.09 work)  
 **Milestone:** Phase 1 baseline complete; master-brief MVP gap closure active  
 **Overall:** Working local vertical slice, not yet MVP-complete
 
@@ -9,11 +9,18 @@
 
 - Vercel project: `booth-os/archigan`.
 - Recorded URL: `https://archigan-ctjx7uh6t-booth-os.vercel.app`.
+- 2026-10-09: all deployments from `f43fc44` through P0.12 failed on Vercel; adding `vercel.json` (framework `nextjs`) made commit `6fa7198` deploy successfully per the GitHub `Vercel` status. Logs/runtime remain unverified.
 - Observed 2026-10-08: hostname responds with a `302` redirect to Vercel SSO/Deployment Protection.
 - Deployment metadata and authenticated application smoke test remain unverified because this session lacks `booth-os` connector/CLI authorization. See `DEPLOYMENT.md`.
 
 ## Working now
 
+- Canonical v2 contracts (`BuildingSpec`, `Artifact`, `GenerationJob`, `DesignNode`/ports, `DesignRevision`, `SiftProjectV2`), graph connection/cycle validation, and a lossless v1→v2 migration. Storage writes v2 (`projects-v2`), reads legacy `projects-v1` read-only, preserves unreadable records, and saves in one atomic transaction.
+- Geometry engine: `computeLayout(BuildingSpec)` (rectangle/circle footprints, multi-volume podium/tower, offsets, twist, taper, setbacks, roof, glazing, bounds, clamping warnings) rendered by `three-building.ts`; `deriveBuildingSpec` maps prompts to five typologies. Preview, GLB export, and the massing node now use `BuildingSpec`; browser-verified distinct silhouettes for terraced, twin, cylindrical, and rotated briefs.
+- Project dashboard (`dashboard.tsx`, `projects.ts`): first-run empty state with example briefs, new/open/rename/delete with confirmation, samples open as editable copies, autosave on Generate. Storage CRUD is tested against `fake-indexeddb`.
+- Typed executable canvas: prompt/generation/variation/model/render nodes with typed ports, validated wiring (type mismatch, duplicate input, cycles rejected), add toolbar and contextual “Add next”, Run creates an immutable building-spec artifact + job (+ revision link on re-run), stale detection, persisted viewport. App state is now `SiftProjectV2` end to end; v1 exists only for migration (`legacy-fixtures.ts`).
+- Contextual inspector: provider choice (Generation node), full geometry controls (footprint, floor height, per-volume floors/scale/offset/twist/taper/setbacks, facade, roof, materials) with validated edits; edits on a Generation node make a new artifact + revision, edits on a Variation node are stored on that node; nothing overwrites the source artifact.
+- Non-destructive branching: Branch action, labelled lanes (Branch A/B/…), per-branch artifacts + revisions with the shared parent, version list in the inspector, “Use this version” on Generation nodes. Browser-verified: two branches with different geometry stay distinct and restore identically after reload.
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -25,11 +32,12 @@
 ## Known limitations
 
 - Meshy has not been called with a real account; status must remain “unverified.”
-- The current graph is a guided lifecycle without typed ports, connection validation, project viewport restore, or executable artifact semantics.
-- Current `MassingSpec` generates stacked-box studies; the canonical multi-volume `BuildingSpec` and three distinct typologies are not implemented.
+- Render nodes have no behavior until P0.16; `/api/generate` still returns legacy `MassingSpec` and is unused by the UI; variation nodes derive their spec live (snapshotted for lineage only) (not yet persisted as child artifacts — P0.14).
+- Storage logic is covered via pure functions (`reconcileStores`); IndexedDB itself is not exercised by automated tests (no fake-indexeddb yet).
+- Variation output is derived live from prompt+refinement (not persisted as an artifact, not directly parameter-editable until P0.13/P0.14). Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is now unused.
 - Direct parameter controls, contextual inspector, non-destructive design branches, and restored lineage are not implemented.
 - Camera presets, expanded viewer, selectable render/material/lighting modes, render nodes, and resolution-specific PNG artifacts are not implemented.
-- Project create/delete dashboard flows and complete asset/job persistence are not implemented.
+- Complete asset/job persistence is not implemented; deleted projects are not recoverable; a blank new project is not persisted until its first Generate (schema requires a prompt).
 - Meshy create code exists, but the client job lifecycle, polling/streaming, persistent GLB ingestion, paid-request protection, and provider-mocked tests remain open.
 - Procedural output remains conceptual massing, not BIM, code-compliant, structural, or fabrication geometry.
 - Automated browser end-to-end coverage is not yet committed; the current flow has been manually smoke-tested in the in-app browser.
@@ -38,7 +46,7 @@
 
 ## Verification
 
-- `npm run test`: passed, 2 files / 6 tests.
+- `npm run test`: passed, 8 files / 71 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -46,5 +54,5 @@
 
 ## Next action
 
-Implement `P0.09 Canonical domain contracts and migration`, then `P0.10 Architectural geometry engine`. These contracts unblock branching, typed canvas execution, persistence, rendering, and provider jobs. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement P0.15 (expanded 3D viewer: focus mode, bounds framing, camera presets, grid/axes/shadow toggles, view modes), then P0.16 (render artifacts), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 
