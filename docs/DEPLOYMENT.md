@@ -94,7 +94,7 @@ From a Vercel-authenticated environment with access to `gabelam`:
 
 ```bash
 vercel --scope gabelam project inspect archigan
-vercel --scope gabelam inspect archigan-ctjx7uh6t-booth-os.vercel.app
+vercel --scope gabelam inspect archigan.vercel.app
 vercel curl https://archigan.vercel.app/
 ```
 
