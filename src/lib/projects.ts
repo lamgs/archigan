@@ -102,6 +102,25 @@ export function renameProject(project: SiftProjectV2, rawName: string, now: stri
   return { ok: true, project: { ...project, name: check.name, updatedAt: now } };
 }
 
+/**
+ * Content signature used to detect unsaved changes. It covers everything that is persisted except timestamps, and is
+ * built field by field so key order and `undefined` values never cause false differences.
+ */
+export function projectSignature(p: Pick<SiftProjectV2, "name" | "viewport" | "settings" | "artifacts" | "jobs" | "revisions"> & { graph: FlowGraph }) {
+  const round = (n: number) => Math.round(n * 100) / 100;
+  return JSON.stringify([
+    p.name,
+    [round(p.viewport.x), round(p.viewport.y), round(p.viewport.zoom * 1000) / 1000],
+    p.settings.provider,
+    p.settings.viewer ?? null,
+    p.graph.nodes.map((n) => [n.id, n.type, round(n.position.x), round(n.position.y), n.params, n.artifactId ?? null]),
+    p.graph.edges.map((e) => [e.id, e.source, e.sourcePort, e.target, e.targetPort]),
+    Object.keys(p.artifacts).sort(),
+    Object.keys(p.jobs).sort(),
+    Object.keys(p.revisions).sort(),
+  ]);
+}
+
 export function projectBrief(project: SiftProjectV2) {
   const refinement = project.graph.nodes.find((node) => node.type === "variation")?.params.text;
   return { prompt: projectPrompt(project), refinement: typeof refinement === "string" ? refinement.trim() : "" };

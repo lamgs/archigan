@@ -76,5 +76,7 @@ export function presetPose(preset: CameraPreset, metrics: SceneMetrics, viewport
   }
 }
 
+export const DEFAULT_VIEWER_SETTINGS = { preset: "perspective", mode: "shaded", grid: true, axes: false, shadows: true } as const satisfies { preset: CameraPreset; mode: ViewMode; grid: boolean; axes: boolean; shadows: boolean };
+
 export const PRESET_LABELS: Record<CameraPreset, string> = { perspective: "Perspective", axonometric: "Axonometric", top: "Top", front: "Front", right: "Right" };
 export const MODE_LABELS: Record<ViewMode, string> = { shaded: "Shaded", clay: "Clay", "glass-concrete": "Glass + concrete", wireframe: "Wireframe" };

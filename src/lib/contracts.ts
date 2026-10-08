@@ -170,7 +170,17 @@ export const designRevisionSchema = z.object({
 });
 export type DesignRevision = z.infer<typeof designRevisionSchema>;
 
-export const projectSettingsSchema = z.object({ provider: providerSchema });
+export const viewerSettingsSchema = z.object({
+  preset: z.enum(["perspective", "axonometric", "top", "front", "right"]),
+  mode: z.enum(["shaded", "clay", "glass-concrete", "wireframe"]),
+  grid: z.boolean(),
+  axes: z.boolean(),
+  shadows: z.boolean(),
+});
+export type ViewerSettings = z.infer<typeof viewerSettingsSchema>;
+
+/** `viewer` is optional so projects saved before it existed still validate. */
+export const projectSettingsSchema = z.object({ provider: providerSchema, viewer: viewerSettingsSchema.optional() });
 
 export const siftProjectV2Schema = z
   .object({

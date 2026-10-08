@@ -23,6 +23,7 @@
 - Non-destructive branching: Branch action, labelled lanes (Branch A/B/…), per-branch artifacts + revisions with the shared parent, version list in the inspector, “Use this version” on Generation nodes. Browser-verified: two branches with different geometry stay distinct and restore identically after reload.
 - Expanded viewer: focus mode, bounds-based framing, five camera presets (three true orthographic), display modes, grid/axes/shadow toggles, keyboard orbit/zoom/frame; browser-verified, including that drags/wheel inside the viewer (inline and focus) never move the outer canvas.
 - Render pipeline: Render nodes render offscreen at exact pixel sizes, persist PNG assets outside the project record, track freshness, offer download/preview in the inspector; deleting a project deletes its render assets.
+- Persistence: everything (graph, viewport, prompts, artifacts/specs, revisions, jobs, project + viewer settings, render PNG assets) is stored in browser IndexedDB only; autosave with a visible Saved/Unsaved/Saving/error badge; verified by a full-board restore test and a browser refresh test. Data is local to each browser profile and origin (no cloud sync until P1.01).
 - Shared Codex/Claude operating docs and explicit product boundary.
 - Next.js/TypeScript app shell with React Flow workflow canvas.
 - Deterministic procedural architectural massing in R3F.
@@ -39,7 +40,7 @@
 - Variation output is derived live from prompt+refinement (not persisted as an artifact, not directly parameter-editable until P0.13/P0.14). Courtyard voids are not modeled; vertical/grid facades render as ribbon glazing; the legacy `three-massing.ts` builder is now unused.
 - Direct parameter controls, contextual inspector, non-destructive design branches, and restored lineage are not implemented.
 - The viewer’s own “PNG” button still captures the live canvas at its on-screen size (render nodes are the resolution-specific path); live viewer settings are not persisted; renders are produced on the main thread and block briefly at large sizes.
-- Complete asset/job persistence is not implemented; deleted projects are not recoverable; a blank new project is not persisted until its first Generate (schema requires a prompt).
+- Orphaned render assets (superseded renders) are kept until the project is deleted; deleted projects are not recoverable; a blank new project is not persisted until its first Generate (schema requires a prompt).
 - Meshy create code exists, but the client job lifecycle, polling/streaming, persistent GLB ingestion, paid-request protection, and provider-mocked tests remain open.
 - Procedural output remains conceptual massing, not BIM, code-compliant, structural, or fabrication geometry.
 - Automated browser end-to-end coverage is not yet committed; the current flow has been manually smoke-tested in the in-app browser.
@@ -48,7 +49,7 @@
 
 ## Verification
 
-- `npm run test`: passed, 10 files / 97 tests.
+- `npm run test`: passed, 11 files / 103 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
@@ -56,5 +57,5 @@
 
 ## Next action
 
-Implement P0.17 (complete persistence/assets audit: viewport, nodes, edges, prompts, specs, settings, revisions, artifacts, renders, jobs restore the full Terraced Tower board with both branches; no localStorage blobs), then P0.18 (Meshy lifecycle), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
+Implement P0.18 (Meshy async lifecycle: protected paid-request confirmation, create/status/poll/cancel, normalized job states, reload-safe jobs, GLB ingestion, signed-URL expiry, mocked contract tests; real-key result recorded separately as verified/unverified), which move the UI onto v2 and persist the `BuildingSpec` artifact so P0.13 inspector edits create revisions. Do not start post-MVP Supabase/Tripo work while P0 remains open.
 

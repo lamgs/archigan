@@ -245,3 +245,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .render-preview { width: 100%; height: auto; border: 1px solid var(--line); background: repeating-conic-gradient(#e9e4d8 0% 25%, #f7f4ed 0% 50%) 50% / 14px 14px; }
 .render-download { display: inline-block; justify-self: start; text-decoration: none; padding: 6px 12px; font-size: 11px; color: var(--ink); }
 .inspector select:disabled { opacity: .6; }
+
+.save-badge { padding: 3px 9px; border-radius: 999px; background: #e4dfd2; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.save-badge[data-state="saved"] { background: #dbe8d6; color: #3d6a36; }
+.save-badge[data-state="dirty"], .save-badge[data-state="saving"] { background: #f3dfb8; color: #8a5a10; }
+.save-badge[data-state="error"] { background: #f3d9d4; color: var(--accent); }
+.save-badge[data-state="idle"]:empty { display: none; }

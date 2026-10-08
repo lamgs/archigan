@@ -3,9 +3,10 @@
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge, type Viewport } from "@xyflow/react";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DesignEdge, DesignNode, DesignNodeType, Provider, SiftProjectV2 } from "@/lib/contracts";
+import type { DesignEdge, DesignNode, DesignNodeType, Provider, SiftProjectV2, ViewerSettings } from "@/lib/contracts";
+import { DEFAULT_VIEWER_SETTINGS } from "@/lib/viewer";
 import { NODE_PORTS, validateConnection } from "@/lib/graph";
-import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, renameProject, validateProjectName } from "@/lib/projects";
+import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, projectSignature, renameProject, validateProjectName } from "@/lib/projects";
 import { sampleProjects } from "@/lib/samples";
 import { probeGpu, renderPng } from "@/lib/render-image";
 import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
@@ -55,6 +56,9 @@ function Studio() {
   const [renderError, setRenderError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const counter = useRef(0);
+  const [savedSig, setSavedSig] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     void listProjects().then(setSaved).catch(() => setNotice("Local storage is unavailable; this session still works.")).finally(() => setLoadingProjects(false));
@@ -67,6 +71,7 @@ function Studio() {
     edges: edges.map((edge): DesignEdge => ({ id: edge.id, source: edge.source, sourcePort: edge.sourceHandle ?? "", target: edge.target, targetPort: edge.targetHandle ?? "" })),
   }), [nodes, edges]);
   const results = useMemo(() => evaluateGraph(graph, meta.artifacts), [graph, meta.artifacts]);
+  const signature = useMemo(() => projectSignature({ ...meta, graph }), [meta, graph]);
   const selectedId = nodes.find((node) => node.selected)?.id;
   const preview = useMemo(() => previewSpec(results, graph, selectedId), [results, graph, selectedId]);
   const blank = graph.nodes.filter((node) => node.type === "prompt").every((node) => !String(node.params.text ?? "").trim());
@@ -85,18 +90,42 @@ function Studio() {
     const committed = commitVariations({ ...g, artifacts: base.artifacts, jobs: base.jobs, revisions: base.revisions }, uid, new Date().toISOString());
     const committedMeta = { ...base, name: named.name, artifacts: committed.artifacts, revisions: committed.revisions };
     const project = buildProject(committedMeta, { nodes: committed.nodes, edges: committed.edges }, viewport);
+    setSaving(true);
     try {
       setSaved(await saveProject(project));
-      setMeta(metaOf(project));
+      // Merge only what the save produced. Replacing the whole state would roll back edits made while the write was in flight.
+      setMeta((current) => ({ ...current, name: project.name, updatedAt: project.updatedAt, artifacts: { ...current.artifacts, ...project.artifacts }, revisions: { ...current.revisions, ...project.revisions } }));
+      setSavedSig(projectSignature(project));
+      setSaveFailed(false);
       setNodes((current) => current.map((node) => {
         const updated = committed.nodes.find((item) => item.id === node.id);
         return updated && updated.artifactId !== node.data.artifactId ? { ...node, data: { ...node.data, artifactId: updated.artifactId } } : node;
       }));
       setNotice("Project saved in this browser.");
     } catch {
+      setSaveFailed(true);
       setNotice("Could not write to IndexedDB; your open session is unchanged.");
+    } finally {
+      setSaving(false);
     }
   };
+
+  // Autosave: persist shortly after any change so a refresh never loses work. The ref keeps the timer on the latest closure.
+  const persistRef = useRef(persist);
+  useEffect(() => { persistRef.current = persist; });
+  const dirty = savedSig !== null && signature !== savedSig;
+  useEffect(() => {
+    if (view !== "studio" || blank || !dirty) return;
+    const timer = window.setTimeout(() => void persistRef.current(), 900);
+    return () => window.clearTimeout(timer);
+  }, [view, blank, dirty, signature]);
+  useEffect(() => {
+    const flush = () => { if (document.visibilityState === "hidden" && dirty && !blank && view === "studio") void persistRef.current(); };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => { document.removeEventListener("visibilitychange", flush); window.removeEventListener("pagehide", flush); };
+  }, [dirty, blank, view]);
+  const flushIfDirty = async () => { if (view === "studio" && dirty && !blank) await persistRef.current(); };
 
   const renderNode = async (id: string) => {
     const node = graph.nodes.find((item) => item.id === id);
@@ -258,26 +287,37 @@ function Studio() {
     return { ...edge, animated: results[edge.source]?.status === "ready", style: { stroke: (kind && PORT_COLORS[kind]) || "#8f2f24", strokeWidth: 1.8 } };
   }), [edges, graph, results]);
 
-  const load = (project: SiftProjectV2) => {
+  const loadNow = (project: SiftProjectV2) => {
     const copy = structuredClone(project);
     setMeta(metaOf(copy));
     setNodes(toFlowNodes(copy.graph));
     setEdges(toFlowEdges(copy.graph));
     setNotice(isBlankProject(copy) ? "Describe a building to begin." : `${copy.name} loaded.`);
+    setSavedSig(projectSignature({ ...copy, graph: copy.graph }));
     setView("studio");
+  };
+
+  const load = async (project: SiftProjectV2) => {
+    await flushIfDirty();
+    loadNow(project);
+  };
+
+  const goToDashboard = async () => {
+    await flushIfDirty();
+    setView("dashboard");
   };
 
   const names = () => saved.map((item) => item.name);
   const newId = () => crypto.randomUUID();
-  const startNew = (example?: (typeof EXAMPLE_PROMPTS)[number]) => {
-    load(createBlankProject(newId(), new Date().toISOString(), names()));
+  const startNew = async (example?: (typeof EXAMPLE_PROMPTS)[number]) => {
+    await load(createBlankProject(newId(), new Date().toISOString(), names()));
     if (example) applyExample(example);
   };
   const applyExample = (example: (typeof EXAMPLE_PROMPTS)[number]) => {
     setNodes((current) => current.map((node) => (node.data.type === "prompt" ? { ...node, data: { ...node.data, params: { text: example.prompt } } } : node.data.type === "variation" ? { ...node, data: { ...node.data, params: { text: example.refinement } } } : node)));
     setNotice("Example brief loaded — press Run on the Generation node.");
   };
-  const openSample = (sample: SiftProjectV2) => load(copyFromSample(sample, newId(), new Date().toISOString(), names()));
+  const openSample = (sample: SiftProjectV2) => void load(copyFromSample(sample, newId(), new Date().toISOString(), names()));
 
   const renameSaved = async (target: SiftProjectV2, name: string) => {
     const result = renameProject(target, name, new Date().toISOString());
@@ -311,13 +351,20 @@ function Studio() {
     if (provider === "meshy") setNotice(meshyConfigured ? "Meshy is configured but live credit-spending calls remain disabled in this slice." : "Add the server-only Meshy key to enable hosted generation later.");
   };
   const provider = meta.settings.provider;
+  const saveLabel = view !== "studio" ? { state: "idle", text: "" }
+    : saving ? { state: "saving", text: "Saving…" }
+    : saveFailed ? { state: "error", text: "Not saved — storage error" }
+    : blank ? { state: "idle", text: "Not saved yet" }
+    : dirty || savedSig === null ? { state: "dirty", text: "Unsaved changes" }
+    : { state: "saved", text: `Saved ${new Date(meta.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` };
+  const viewerSettings: ViewerSettings = meta.settings.viewer ?? DEFAULT_VIEWER_SETTINGS;
 
   return (
     <main className="studio-shell">
       <header className="topbar">
-        <a className="brand" href="#workspace" aria-label="Sift home — all projects" onClick={(event) => { event.preventDefault(); setView("dashboard"); }}><span>S</span><strong>Sift</strong><small>Architectural intelligence</small></a>
+        <a className="brand" href="#workspace" aria-label="Sift home — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}><span>S</span><strong>Sift</strong><small>Architectural intelligence</small></a>
         <div className="project-title">{view === "studio" && <><span>Project /</span><input aria-label="Project name" value={meta.name} onChange={(event) => setMeta((current) => ({ ...current, name: event.target.value }))} /></>}</div>
-        <div className="topbar__actions"><span className="save-state" role="status">{notice}</span>{view === "studio" && <button type="button" className="ghost-button" onClick={() => void persist()}>Save project</button>}{view === "studio" && <button type="button" className="ghost-button" onClick={() => setView("dashboard")}>All projects</button>}</div>
+        <div className="topbar__actions"><span className="save-badge" data-state={saveLabel.state} role="status" aria-live="polite">{saveLabel.text}</span><span className="save-state" role="status">{notice}</span>{view === "studio" && <button type="button" className="ghost-button" onClick={() => void persist()}>Save project</button>}{view === "studio" && <button type="button" className="ghost-button" onClick={() => void goToDashboard()}>All projects</button>}</div>
       </header>
 
       {view === "dashboard" ? (
@@ -370,7 +417,7 @@ function Studio() {
           </section>
 
           {preview ? (
-            <ModelPreview spec={preview.spec} provider={provider} stale={preview.stale} />
+            <ModelPreview spec={preview.spec} provider={provider} stale={preview.stale} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
           ) : (
             <aside className="preview-panel preview-panel--loading" aria-label="3D study preview"><p>No model yet. Write a brief, connect it to a Generation node, and press Run.</p></aside>
           )}

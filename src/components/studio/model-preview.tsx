@@ -4,11 +4,11 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MathUtils, OrthographicCamera, PerspectiveCamera, Spherical, Vector3, type Group } from "three";
 import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
-import type { BuildingSpec, Provider } from "@/lib/contracts";
+import type { BuildingSpec, Provider, ViewerSettings } from "@/lib/contracts";
 import { computeLayout } from "@/lib/geometry";
 import { buildBuildingGroup, disposeBuildingGroup } from "@/lib/three-building";
 import { describeSpec } from "@/lib/typologies";
-import { CAMERA_PRESETS, MODE_LABELS, PERSPECTIVE_FOV, PRESET_LABELS, VIEW_MODES, presetPose, sceneMetrics, type CameraPreset, type SceneMetrics, type ViewMode } from "@/lib/viewer";
+import { CAMERA_PRESETS, DEFAULT_VIEWER_SETTINGS, MODE_LABELS, PERSPECTIVE_FOV, PRESET_LABELS, VIEW_MODES, presetPose, sceneMetrics, type CameraPreset, type SceneMetrics, type ViewMode } from "@/lib/viewer";
 
 type RigHandle = { frame: () => void; orbit: (azimuth: number, polar: number) => void; zoom: (factor: number) => void };
 
@@ -143,16 +143,18 @@ function Toggle({ label, pressed, onChange, shortcut }: { label: string; pressed
   return <button type="button" aria-pressed={pressed} aria-keyshortcuts={shortcut} className="viewer-toggle" onClick={() => onChange(!pressed)}>{label}</button>;
 }
 
-export function ModelPreview({ spec, provider, stale = false }: { spec: BuildingSpec; provider: Provider; stale?: boolean }) {
+export function ModelPreview({ spec, provider, stale = false, settings = DEFAULT_VIEWER_SETTINGS, onSettings }: { spec: BuildingSpec; provider: Provider; stale?: boolean; settings?: ViewerSettings; onSettings?: (settings: ViewerSettings) => void }) {
   const canvasWrap = useRef<HTMLDivElement>(null);
   const focusButton = useRef<HTMLButtonElement>(null);
   const rig = useRef<RigHandle | null>(null);
   const onRig = useCallback((handle: RigHandle) => { rig.current = handle; }, []);
-  const [preset, setPreset] = useState<CameraPreset>("perspective");
-  const [mode, setMode] = useState<ViewMode>("shaded");
-  const [grid, setGrid] = useState(true);
-  const [axes, setAxes] = useState(false);
-  const [shadows, setShadows] = useState(true);
+  const { preset, mode, grid, axes, shadows } = settings;
+  const update = (patch: Partial<ViewerSettings>) => onSettings?.({ ...settings, ...patch });
+  const setPreset = (value: CameraPreset) => update({ preset: value });
+  const setMode = (value: ViewMode) => update({ mode: value });
+  const setGrid = (value: boolean) => update({ grid: value });
+  const setAxes = (value: boolean) => update({ axes: value });
+  const setShadows = (value: boolean) => update({ shadows: value });
   const [focus, setFocus] = useState(false);
   const [frameToken, setFrameToken] = useState(0);
   const [exportState, setExportState] = useState<"idle" | "exporting" | "complete" | "error">("idle");

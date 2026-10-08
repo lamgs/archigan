@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.17 complete persistence
+
+- Added autosave (debounce + visibilitychange/pagehide flush + flush before navigating away), `projectSignature` change detection, save badge, persisted `settings.viewer` (optional in schema), controlled `ModelPreview` settings. Fixed a real race where an in-flight save’s `setMeta` rolled back newer edits (found by Playwright): saves now merge only name/updatedAt/artifacts/revisions.
+- Answered user questions: storage is IndexedDB in each visitor’s browser (local, per browser profile + origin); no Supabase table is needed now; sync is P1.01.
+- Checks: test 103/103, lint clean, build passes. Playwright: edit prompt/move node/pan/viewer changes → refresh without pressing Save → everything restored; flush on navigate keeps edits; localStorage/sessionStorage empty.
+- Open risks: sample copies are not persisted until first change; autosave writes whole project each time (fine at current size); superseded render assets accumulate; unload-time IndexedDB writes are best-effort.
+- Next: P0.18 Meshy lifecycle (paid-request guard first; the unauthenticated `/api/generate` is the main open security risk from the initial review).
+
 ## 2026-10-09 — Claude — P0.16 render artifact pipeline
 
 - Added `render-settings.ts` (pure: settings parsing, `supportedResolutions`, `renderInputKey`), `render-image.ts` (offscreen three.js renderer + GPU probe), asset store functions in `storage.ts`, `recordRender` and render freshness (`pending` status) in `workflow.ts`, Render node button and inspector Render panel (settings, preview, download).
