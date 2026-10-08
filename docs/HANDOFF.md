@@ -2,6 +2,13 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — P0.16 render artifact pipeline
+
+- Added `render-settings.ts` (pure: settings parsing, `supportedResolutions`, `renderInputKey`), `render-image.ts` (offscreen three.js renderer + GPU probe), asset store functions in `storage.ts`, `recordRender` and render freshness (`pending` status) in `workflow.ts`, Render node button and inspector Render panel (settings, preview, download).
+- Checks: test 97/97, lint clean, build passes. Playwright (headless Chromium/SwiftShader): decoded PNGs were exactly 1600×900, 1024×1024, 1920×1080; transparent background has real alpha; settings change / upstream edit → “Needs render”; reload restores the image from IndexedDB; download works; no page errors.
+- Open risks: 1920×1080 availability relies on `maxRenderbufferSize`/viewport dims/`deviceMemory` heuristics, not an allocation test beyond a canvas-size check; render runs on the main thread; PNG geometry/view match is verified by dimensions/bbox/visual inspection, not an automated pixel diff in CI (P0.20).
+- Next: P0.17 persistence audit — write a test that rebuilds the full Terraced Tower board with both branches + a render from storage.
+
 ## 2026-10-09 — Claude — P0.15 expanded 3D viewer (+ PR #1 merged, Vercel verified)
 
 - Merged PR #1 (P0.09–P0.14 + Vercel fix) to `main`; Vercel status for the merge commit `47e43aa` was `success`. Branch restarted from `main` for new work.

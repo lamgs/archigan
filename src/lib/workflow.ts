@@ -10,13 +10,15 @@ import {
   type Provider,
 } from "./contracts";
 import { NODE_PORTS, validateConnection } from "./graph";
+import { parseRenderSettings, renderInputKey } from "./render-settings";
 import { applyEdit, applyEdits, describeEdit, mergeEdit, type SpecEdit } from "./spec-edit";
 import { deriveBuildingSpec, normalizeBriefText } from "./typologies";
 
 export type FlowGraph = { nodes: DesignNode[]; edges: DesignEdge[] };
 export type Brief = { prompt: string; refinement: string };
 export type NodeOutput = { kind: "prompt"; text: string } | { kind: "spec"; spec: BuildingSpec; brief: Brief };
-export type NodeResult = { status: "ready" | "stale"; output: NodeOutput } | { status: "blocked"; message: string };
+/** `pending` is used by Render nodes whose image is missing or no longer matches the model/settings. */
+export type NodeResult = { status: "ready" | "stale" | "pending"; output: NodeOutput; message?: string } | { status: "blocked"; message: string };
 
 export const NODE_LABELS: Record<DesignNodeType, string> = { prompt: "Prompt", generation: "Generation", variation: "Variation", model: "Model", render: "Render" };
 
@@ -94,7 +96,14 @@ export function evaluateGraph(graph: FlowGraph, artifacts: Record<string, Artifa
       const spec = applyEdits(base, variationEdits(node));
       return { status: input.status, output: { kind: "spec", spec, brief } };
     }
-    return { status: input.status, output: input.output }; // model / render consume the spec
+    if (node.type === "render") {
+      const artifact = node.artifactId ? artifacts[node.artifactId] : undefined;
+      const key = renderInputKey(input.output.spec, parseRenderSettings(node.params));
+      if (!artifact) return { status: "pending", output: input.output, message: "Not rendered yet — press Render." };
+      if (artifact.metadata.inputKey !== key) return { status: "pending", output: input.output, message: "The model or settings changed — render again." };
+      return { status: input.status, output: input.output };
+    }
+    return { status: input.status, output: input.output }; // model nodes display the spec
   };
 
   graph.nodes.forEach((node) => evaluate(node.id));
@@ -311,4 +320,31 @@ export function restoreVersion(state: RunInput, nodeId: string, artifactId: stri
   if (!node || node.type !== "generation") return { ok: false, message: "Only Generation nodes can switch versions." };
   if (state.artifacts[artifactId]?.sourceNodeId !== nodeId) return { ok: false, message: "That version was not produced by this node." };
   return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId } : item)) } };
+}
+
+// ---------------------------------------------------------------------------
+// Render artifacts (P0.16)
+// ---------------------------------------------------------------------------
+
+export type RenderRecord = { artifactId: string; width: number; height: number; bytes: number };
+
+/**
+ * Records a finished render as an immutable `render-png` artifact bound to the exact model and settings it was made
+ * from. The previous render stays in `artifacts`; the node simply points at the newest one.
+ */
+export function recordRender(state: RunInput, nodeId: string, record: RenderRecord, now: string): Mutation<{ state: RunInput }> {
+  const node = state.nodes.find((item) => item.id === nodeId);
+  if (!node || node.type !== "render") return { ok: false, message: "Select a Render node." };
+  const result = evaluateGraph(state, state.artifacts)[nodeId];
+  if (!result || result.status === "blocked" || result.output.kind !== "spec") return { ok: false, message: "Connect a generated model to this Render node first." };
+  const settings = parseRenderSettings(node.params);
+  const artifact: Artifact = {
+    id: record.artifactId,
+    kind: "render-png",
+    sourceNodeId: nodeId,
+    createdAt: now,
+    storageKey: `asset:${record.artifactId}`,
+    metadata: { origin: "render", settings, width: record.width, height: record.height, bytes: record.bytes, inputKey: renderInputKey(result.output.spec, settings), parentArtifactId: upstreamArtifactId(state, nodeId) ?? null },
+  };
+  return { ok: true, state: { ...state, nodes: state.nodes.map((item) => (item.id === nodeId ? { ...item, artifactId: artifact.id } : item)), artifacts: { ...state.artifacts, [artifact.id]: artifact } } };
 }

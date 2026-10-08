@@ -239,3 +239,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .viewer-hint { position: absolute; top: 8px; left: 12px; margin: 0; padding: 3px 6px; background: rgba(247,244,237,.72); color: #4d4943; font-size: 9px; pointer-events: none; }
 .preview-panel--focus { position: fixed; z-index: 60; inset: 68px 0 0 0; grid-template-rows: 82px auto 1fr auto auto auto auto; border: 0; background: var(--paper-deep); }
 .preview-panel__actions { grid-template-columns: repeat(4, auto); justify-content: start; }
+
+.status--pending { background: #e6dcc5; color: #7a5b1c; }
+
+.render-preview { width: 100%; height: auto; border: 1px solid var(--line); background: repeating-conic-gradient(#e9e4d8 0% 25%, #f7f4ed 0% 50%) 50% / 14px 14px; }
+.render-download { display: inline-block; justify-self: start; text-decoration: none; padding: 6px 12px; font-size: 11px; color: var(--ink); }
+.inspector select:disabled { opacity: .6; }

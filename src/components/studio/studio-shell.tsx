@@ -7,9 +7,11 @@ import type { DesignEdge, DesignNode, DesignNodeType, Provider, SiftProjectV2 } 
 import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, renameProject, validateProjectName } from "@/lib/projects";
 import { sampleProjects } from "@/lib/samples";
-import { deleteProject, listProjects, saveProject } from "@/lib/storage";
+import { probeGpu, renderPng } from "@/lib/render-image";
+import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
+import { deleteProject, listProjects, loadAsset, saveAsset, saveProject } from "@/lib/storage";
 import type { SpecEdit } from "@/lib/spec-edit";
-import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, restoreVersion, runGeneration, versionsOf, type FlowGraph } from "@/lib/workflow";
+import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, editNodeGeometry, evaluateGraph, nextNodeTypes, NODE_LABELS, previewSpec, recordRender, restoreVersion, runGeneration, versionsOf, type FlowGraph } from "@/lib/workflow";
 import { Dashboard } from "./dashboard";
 import { Inspector } from "./inspector";
 import { StudioNode, type StudioFlowNode } from "./studio-node";
@@ -48,10 +50,15 @@ function Studio() {
   const [meshyConfigured, setMeshyConfigured] = useState(false);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [gpu, setGpu] = useState<GpuLimits | null | undefined>(undefined);
+  const [rendering, setRendering] = useState(false);
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const counter = useRef(0);
 
   useEffect(() => {
     void listProjects().then(setSaved).catch(() => setNotice("Local storage is unavailable; this session still works.")).finally(() => setLoadingProjects(false));
+    queueMicrotask(() => setGpu(probeGpu())); // browser-only capability probe
     void fetch("/api/providers").then((response) => response.json()).then((data: { meshy?: { configured?: boolean } }) => setMeshyConfigured(Boolean(data.meshy?.configured))).catch(() => setMeshyConfigured(false));
   }, []);
 
@@ -91,7 +98,40 @@ function Studio() {
     }
   };
 
+  const renderNode = async (id: string) => {
+    const node = graph.nodes.find((item) => item.id === id);
+    const result = results[id];
+    if (!node || !result || result.status === "blocked" || result.output.kind !== "spec") return setNotice("Connect a generated model to this Render node first.");
+    const settings = parseRenderSettings(node.params);
+    if (!supportedResolutions(gpu ?? null).includes(settings.resolution)) return setRenderError("That resolution is not supported on this device. Choose another size.");
+    setRendering(true);
+    setRenderError(null);
+    try {
+      const image = await renderPng(result.output.spec, settings);
+      const artifactId = uid("render");
+      await saveAsset(`asset:${artifactId}`, image.blob);
+      const recorded = recordRender({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, id, { artifactId, width: image.width, height: image.height, bytes: image.blob.size }, new Date().toISOString());
+      if (!recorded.ok) return setRenderError(recorded.message);
+      const next = { ...meta, artifacts: recorded.state.artifacts };
+      setMeta(next);
+      setNodes((current) => current.map((item) => (item.id === id ? { ...item, data: { ...item.data, artifactId } } : item)));
+      setNotice(`Rendered ${describeRender(settings)}.`);
+      void persist(next, { nodes: recorded.state.nodes, edges: recorded.state.edges });
+    } catch (error) {
+      setRenderError(error instanceof Error ? error.message : "The render failed.");
+    } finally {
+      setRendering(false);
+    }
+  };
+
+  const setRenderSetting = (key: keyof RenderSettings, value: string) => {
+    if (!selectedId) return;
+    setRenderError(null);
+    setNodes((current) => current.map((node) => (node.id === selectedId ? { ...node, data: { ...node.data, params: { ...node.data.params, [key]: value } } } : node)));
+  };
+
   const run = (id: string) => {
+    if (graph.nodes.find((node) => node.id === id)?.type === "render") return void renderNode(id);
     const result = runGeneration({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, id, meta.settings.provider, { artifact: uid("artifact"), job: uid("job"), revision: uid("rev") }, new Date().toISOString());
     if (!result.ok) return setNotice(result.message);
     const next = { ...meta, artifacts: result.state.artifacts, jobs: result.state.jobs, revisions: result.state.revisions };
@@ -105,6 +145,32 @@ function Studio() {
   const selectedNode = graph.nodes.find((node) => node.id === selectedId);
   const selectedResult = selectedId ? results[selectedId] : undefined;
   const selectedSpec = selectedResult && selectedResult.status !== "blocked" && selectedResult.output.kind === "spec" ? selectedResult.output.spec : undefined;
+
+  const selectedRenderArtifact = selectedNode?.type === "render" && selectedNode.artifactId ? meta.artifacts[selectedNode.artifactId] : undefined;
+  const selectedAssetKey = selectedRenderArtifact?.storageKey;
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelled = false;
+    if (selectedAssetKey) {
+      void loadAsset(selectedAssetKey).then((blob) => {
+        if (cancelled) return;
+        if (blob) { url = URL.createObjectURL(blob); setImageUrl(url); } else setImageUrl(null);
+      }).catch(() => !cancelled && setImageUrl(null));
+    } else queueMicrotask(() => !cancelled && setImageUrl(null));
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
+  }, [selectedAssetKey]);
+
+  const renderSettings = parseRenderSettings(selectedNode?.params ?? {});
+  const renderState = {
+    settings: renderSettings,
+    resolutions: supportedResolutions(gpu ?? null),
+    gpuKnown: gpu !== undefined,
+    busy: rendering,
+    error: renderError,
+    imageUrl,
+    imageInfo: selectedRenderArtifact ? `${selectedRenderArtifact.metadata.width}×${selectedRenderArtifact.metadata.height} PNG · ${Math.round(Number(selectedRenderArtifact.metadata.bytes ?? 0) / 1024)} KB` : null,
+    fresh: selectedResult?.status === "ready",
+  };
 
   const editGeometry = (edit: SpecEdit) => {
     if (!selectedId) return;
@@ -180,7 +246,9 @@ function Studio() {
     const result = results[node.id];
     const status = !result ? "blocked" : result.status;
     const summary = result && result.status !== "blocked" && result.output.kind === "spec" ? `${Math.max(...result.output.spec.volumes.map((v) => v.startFloor + v.floorCount))} levels · ${result.output.spec.volumes.length} ${result.output.spec.volumes.length === 1 ? "volume" : "volumes"}` : "";
-    return { ...node, data: { ...node.data, status, message: result?.status === "blocked" ? result.message : "", summary, nextTypes: nextNodeTypes(node.data.type), onText: setParam, onAdd: add, onRun: run, onBranch: branch, onCommit: () => { if (!blank) void persist(); } } };
+    const message = result && "message" in result && result.message ? result.message : "";
+    const renderSummary = node.data.type === "render" && result?.status === "ready" ? `Rendered ${describeRender(parseRenderSettings(node.data.params))}` : summary;
+    return { ...node, data: { ...node.data, status, message, summary: renderSummary, nextTypes: nextNodeTypes(node.data.type), onText: setParam, onAdd: add, onRun: run, onBranch: branch, onCommit: () => { if (!blank) void persist(); } } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [nodes, results, graph, meta]);
 
@@ -293,6 +361,10 @@ function Studio() {
               onProvider={setProvider}
               onEdit={editGeometry}
               onClearEdits={clearEdits}
+              render={renderState}
+              canRender={Boolean(selectedSpec)}
+              onRenderSetting={setRenderSetting}
+              onRender={() => void renderNode(selectedId ?? "")}
             />
             {blank && <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>}
           </section>

@@ -9,7 +9,7 @@ export type StudioNodeData = {
   type: DesignNodeType;
   params: Record<string, unknown>;
   artifactId?: string;
-  status: "ready" | "stale" | "blocked";
+  status: "ready" | "stale" | "pending" | "blocked";
   message: string;
   summary: string;
   nextTypes: DesignNodeType[];
@@ -23,7 +23,7 @@ export type StudioNodeData = {
 export type StudioFlowNode = Node<StudioNodeData, "studio">;
 
 const EYEBROW: Record<DesignNodeType, string> = { prompt: "Intent", generation: "Generate", variation: "Direct", model: "Model", render: "Render" };
-const STATUS_LABEL = { ready: "Ready", stale: "Out of date", blocked: "Waiting" } as const;
+const STATUS_LABEL = { ready: "Ready", stale: "Out of date", pending: "Needs render", blocked: "Waiting" } as const;
 
 export function StudioNode({ id, data, selected }: NodeProps<StudioFlowNode>) {
   const ports = NODE_PORTS[data.type];
@@ -51,9 +51,10 @@ export function StudioNode({ id, data, selected }: NodeProps<StudioFlowNode>) {
           onBlur={data.onCommit}
         />
       ) : (
-        <p>{data.status === "blocked" ? data.message : data.summary}</p>
+        <p>{data.status === "blocked" || data.status === "pending" ? data.message : data.summary}</p>
       )}
       {data.type === "generation" && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Run again" : "Run"}</button>}
+      {data.type === "render" && data.status !== "blocked" && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Render again" : "Render"}</button>}
       {selected && (data.type === "generation" || data.type === "variation") && data.status !== "blocked" && <button type="button" className="nodrag node-branch" onClick={() => data.onBranch(id)}>Branch ⑂</button>}
       {data.status === "stale" && <p className="node-note">The upstream prompt changed — run again to update.</p>}
       {selected && data.nextTypes.length > 0 && (
