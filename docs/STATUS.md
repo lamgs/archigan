@@ -62,7 +62,7 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Verification
 
-- `npm run test`: passed, 16 files / 164 tests.
+- `npm run test`: passed, 16 files / 163 tests.
 - `npm run lint`: passed with zero warnings.
 - `npm run build`: passed on Next.js 16.4.0; `/`, `/api/generate`, and `/api/providers` built successfully.
 - `npm audit --audit-level=high`: passed, zero known vulnerabilities.
