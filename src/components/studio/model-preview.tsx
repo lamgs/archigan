@@ -1,5 +1,6 @@
 "use client";
 
+import { providerLabel } from "@/lib/provider-meta";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Box3, MathUtils, Object3D, OrthographicCamera, PerspectiveCamera, Spherical, Vector3, type Group } from "three";
@@ -263,7 +264,7 @@ export function ModelPreview({ spec: specProp, hosted, provider, stale = false, 
           <span className="section-kicker">Live study</span>
           <h2>Form preview</h2>
         </div>
-        <span className="provider-chip"><i /> {provider === "procedural" ? "Local fallback" : "Meshy preview"}</span>
+        <span className="provider-chip"><i /> {provider === "procedural" ? "Local fallback" : `${providerLabel(provider)} preview`}</span>
         <button ref={focusButton} type="button" className="viewer-focus" onClick={() => (focus ? closeFocus() : setFocus(true))} aria-pressed={focus}>{focus ? "Close focus (Esc)" : "Focus"}</button>
       </header>
 
@@ -320,7 +321,7 @@ export function ModelPreview({ spec: specProp, hosted, provider, stale = false, 
       {pngError && <p className="preview-panel__note" role="alert">{pngError}</p>}
       {exportState === "error" && !complexity.ok && <p className="preview-panel__note" role="alert">GLB export was blocked because the model exceeds the complexity limit.</p>}
       {hostedError && <p className="preview-panel__note" role="alert">{hostedError}</p>}
-      {showHosted && <p className="preview-panel__note">Hosted Meshy mesh — a fixed model, not editable geometry. Hosted generation is unverified against a live account.</p>}
+      {showHosted && <p className="preview-panel__note">Hosted mesh ({hosted?.label.replace(/ GLB$/, "")}) — a fixed model, not editable geometry. Hosted generation is unverified against a live account.</p>}
       {stale && <p className="preview-panel__note" role="status">Showing the last generated model — the prompt has changed since. Run the Generation node again.</p>}
       {layout.warnings.length > 0 && <p className="preview-panel__note" role="status">{layout.warnings[0]}</p>}
       <p className="preview-panel__note">Concept massing only — not BIM, engineering, or construction geometry.</p>

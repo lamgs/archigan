@@ -8,7 +8,8 @@ import { computeLayout } from "../src/lib/geometry";
 import { layoutComplexity } from "../src/lib/limits";
 import { deriveBuildingSpec } from "../src/lib/typologies";
 import { sceneMetrics } from "../src/lib/viewer";
-import { EVIDENCE, caption, canvasFingerprint, centreColour, viewerCentreColour, fakeHostedApi, fitView, inspectPng, openSavedProject, openStudio, reopenFirstProject, savedBadge, selectNode, storedProjects, viewportTransform, watchErrors } from "./helpers";
+import { EVIDENCE, caption, canvasFingerprint, centreColour, viewerCentreColour, fakeHostedApi, FAKE_PROVIDERS, fitView, inspectPng, openSavedProject, openStudio, reopenFirstProject, savedBadge, selectNode, storedProjects, viewportTransform, watchErrors } from "./helpers";
+import type { FakeProviderId } from "./helpers";
 
 const volumeField = (page: Page, label: string) => page.locator(`.inspector fieldset:has(legend:text("Volume")) label:has(span:text-is("${label}")) input`);
 const levelsOf = (text: string) => Number(/(\d+) levels/i.exec(text)?.[1]);
@@ -308,36 +309,53 @@ test("8. missing credentials leave procedural mode useful and never fake hosted 
 });
 
 // ---------------------------------------------------------------------------------------------------------------------
-test("9. hosted jobs (mocked contract) handle ids, transitions, errors, assets and reload; live status stays unverified", async ({ page, context }) => {
+for (const providerId of Object.keys(FAKE_PROVIDERS) as FakeProviderId[]) test(`9. hosted jobs for ${providerId} (mocked contract) handle ids, transitions, errors, assets and reload; live status stays unverified`, async ({ page, context }) => {
+  const { label, supportsCancel, costLabel } = FAKE_PROVIDERS[providerId];
   const errors = watchErrors(page, [/status of (402|429)/]); // the mocked API deliberately returns 402 and 429
-  const fake = await fakeHostedApi(context);
+  const fake = await fakeHostedApi(context, providerId);
   await openStudio(page);
   await selectNode(page, "Generation");
-  await page.locator('label.radio:has-text("Meshy")').click();
-  await expect(page.locator('label.radio:has-text("Meshy")')).toContainText("unverified");
+  const option = page.locator(`label.radio[data-provider="${providerId}"]`);
+  await expect(option).toContainText("unverified");
+  await expect(option).toContainText(`${costLabel} (estimate, not a quote)`);
+  await option.click();
   await page.locator(".node-run").click();
   const dialog = page.locator('[role="alertdialog"]');
-  await expect(dialog).toContainText("Meshy");
+  await expect(dialog).toContainText(`Spend ${label} credits?`);
+  await expect(dialog).toContainText(`${costLabel} (an estimate`);
+  await expect(dialog).toContainText(supportsCancel ? "only be cancelled while it is still queued" : "cannot be cancelled once started");
   expect(fake.posts).toHaveLength(0); // nothing sent before explicit confirmation
   await expect(page.locator("button.modal__go")).toBeDisabled();
-  await page.screenshot({ path: `${EVIDENCE}/09-paid-confirmation.png` });
+  await page.screenshot({ path: `${EVIDENCE}/09-paid-confirmation-${providerId}.png` });
 
   fake.mode = "no-credits";
   await dialog.locator('input[type="password"]').fill("letmein");
   await page.locator("button.modal__go").click();
   await expect(dialog.locator('[role="alert"]')).toContainText("no credits");
   expect(fake.posts).toHaveLength(1);
+  expect(fake.posts[0]).toMatchObject({ provider: providerId });
+  await expect(dialog.locator('[role="alert"]')).toContainText(label);
 
   fake.mode = "hold";
   await page.locator("button.modal__go").click();
   await expect(dialog).toHaveCount(0);
-  expect(fake.posts[1]).toMatchObject({ provider: "meshy", confirmSpend: true });
+  expect(fake.posts[1]).toMatchObject({ provider: providerId, confirmSpend: true });
   expect(fake.codes[1]).toBe("letmein");
   const hostedHint = page.locator(".inspector fieldset:has(legend:has-text('Hosted job')) .inspector__hint").first();
-  await expect(hostedHint).toHaveText("Queued at Meshy");
-  await page.locator('button:has-text("Cancel task")').click();
-  await expect(hostedHint).toHaveText("Cancelled");
-  expect(fake.deletes).toBe(1);
+  await expect(hostedHint).toHaveText(`Queued at ${label}`);
+  if (supportsCancel) {
+    await page.locator('button:has-text("Cancel task")').click();
+    await expect(hostedHint).toHaveText("Cancelled");
+    expect(fake.deletes).toBe(1);
+    expect(fake.deleteProviders).toEqual([providerId]);
+  } else {
+    await expect(page.locator('button:has-text("Cancel task")')).toHaveCount(0); // no cancel API for this provider
+    await expect(page.locator(".inspector")).toContainText(`${label} tasks cannot be cancelled`);
+    await page.locator('button:has-text("Stop waiting")').click();
+    await expect(hostedHint).toHaveText("Cancelled");
+    await expect(page.locator(".inspector")).toContainText(`${label} cannot cancel tasks, so this app only stopped waiting`);
+    expect(fake.deletes).toBe(0); // the cancel endpoint is never called
+  }
 
   fake.mode = "ok"; fake.polls = 0;
   await page.locator(".node-run").click();
@@ -345,7 +363,7 @@ test("9. hosted jobs (mocked contract) handle ids, transitions, errors, assets a
   await page.locator("button.modal__go").click();
   await expect(hostedHint).toContainText(/Generating/, { timeout: 20_000 });
   const stored = (await storedProjects(page))[0];
-  expect(Object.values<any>(stored.jobs).some((j) => j.providerTaskId === "task-fake-0001" && j.status !== "completed")).toBe(true); // task id persisted before completion
+  expect(Object.values<any>(stored.jobs).some((j) => j.provider === providerId && j.providerTaskId === "task-fake-0001" && j.status !== "completed")).toBe(true); // task id persisted before completion
 
   await page.reload();
   await openSavedProject(page);
@@ -354,11 +372,15 @@ test("9. hosted jobs (mocked contract) handle ids, transitions, errors, assets a
   fake.polls = 3;
   await page.locator('.inspector fieldset:has(legend:has-text("Hosted job")) input[type="password"]').fill("letmein");
   await expect(hostedHint).toHaveText("Hosted model saved in this browser", { timeout: 40_000 });
-  await expect(page.locator(".preview-panel__caption")).toContainText("Meshy GLB");
+  await expect(page.locator(".preview-panel__caption")).toContainText(`${label} GLB`);
   await expect(page.locator(".preview-panel__caption")).toContainText("unverified");
   await expect(page.locator('[aria-label="Display mode"] button:disabled')).toHaveCount(3);
-  await page.locator(".preview-panel__canvas").screenshot({ path: `${EVIDENCE}/09-hosted-model.png` });
+  await page.locator(".preview-panel__canvas").screenshot({ path: `${EVIDENCE}/09-hosted-model-${providerId}.png` });
 
+  expect(fake.pollProviders.length).toBeGreaterThan(0);
+  expect(new Set(fake.pollProviders)).toEqual(new Set([providerId])); // polling always uses the job's own provider
+  expect(new Set(fake.modelProviders)).toEqual(new Set([providerId]));
+  expect((Object.values<any>((await storedProjects(page))[0].artifacts).find((a) => a.kind === "model-glb")).metadata.origin).toBe(providerId);
   const [download] = await Promise.all([page.waitForEvent("download"), page.locator('button:has-text("Download GLB")').click()]);
   expect(readFileSync((await download.path())!).subarray(0, 4).toString()).toBe("glTF");
 
@@ -366,9 +388,9 @@ test("9. hosted jobs (mocked contract) handle ids, transitions, errors, assets a
   await page.reload(); // the model now comes from IndexedDB alone
   await openSavedProject(page);
   await fitView(page); await selectNode(page, "Generation");
-  await expect(page.locator(".preview-panel__caption")).toContainText("Meshy GLB");
+  await expect(page.locator(".preview-panel__caption")).toContainText(`${label} GLB`);
   await expect(hostedHint).toHaveText("Hosted model saved in this browser");
-  expect((await (await page.request.get("/api/providers")).json()).meshy.verified).toBe(false); // the real endpoint never claims verification
+  expect((await (await page.request.get("/api/providers")).json())[providerId].verified).toBe(false); // the real endpoint never claims verification
   expect(errors).toEqual([]);
 });
 

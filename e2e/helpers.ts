@@ -103,22 +103,32 @@ export function boxGlb(): Buffer {
   return Buffer.concat([head, c1, j, c2, b]);
 }
 
-export type HostedFake = { posts: any[]; codes: (string | undefined)[]; deletes: number; polls: number; mode: "ok" | "no-credits" | "hold" };
+export type FakeProviderId = "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro";
+export const FAKE_PROVIDERS: Record<FakeProviderId, { label: string; costLabel: string; supportsCancel: boolean }> = {
+  "hunyuan3d-rapid": { label: "Hunyuan3D Rapid", costLabel: "about $0.30 per model", supportsCancel: true },
+  "hunyuan3d-pro": { label: "Hunyuan3D Pro", costLabel: "about $0.50 per model", supportsCancel: true },
+  tripo: { label: "Tripo", costLabel: "about $0.40 per model", supportsCancel: false },
+  meshy: { label: "Meshy", costLabel: "about 20 credits", supportsCancel: true },
+};
 
-/** Fakes the app's own hosted API at the browser boundary (documented-contract mock; never a live Meshy call). */
-export async function fakeHostedApi(context: BrowserContext): Promise<HostedFake> {
-  const fake: HostedFake = { posts: [], codes: [], deletes: 0, polls: 0, mode: "ok" };
-  await context.route("**/api/providers", (route) => route.fulfill({ json: { procedural: { configured: true, verified: true }, meshy: { configured: true, enabled: true, hasKey: true, accessCodeRequired: true, verified: false } } }));
+export type HostedFake = { posts: any[]; codes: (string | undefined)[]; deletes: number; polls: number; mode: "ok" | "no-credits" | "hold"; pollProviders: (string | null)[]; deleteProviders: (string | null)[]; modelProviders: (string | null)[] };
+
+/** Fakes the app's own hosted API at the browser boundary (documented-contract mock; never a live vendor call). Every provider is configured. */
+export async function fakeHostedApi(context: BrowserContext, provider: FakeProviderId = "meshy"): Promise<HostedFake> {
+  const fake: HostedFake = { posts: [], codes: [], deletes: 0, polls: 0, mode: "ok", pollProviders: [], deleteProviders: [], modelProviders: [] };
+  const catalog = Object.fromEntries(Object.entries(FAKE_PROVIDERS).map(([id, meta]) => [id, { ...meta, configured: true, enabled: true, hasKey: true, accessCodeRequired: true, verified: false }]));
+  await context.route("**/api/providers", (route) => route.fulfill({ json: { procedural: { configured: true, verified: true }, ...catalog } }));
   await context.route("**/api/generate**", async (route) => {
     const request = route.request();
     if (request.method() === "POST") {
       fake.posts.push(JSON.parse(request.postData() ?? "{}")); fake.codes.push(request.headers()["x-sift-access-code"]);
-      if (fake.mode === "no-credits") return route.fulfill({ status: 402, json: { error: "The Meshy account has no credits left for this request.", code: "insufficient-credits", retryable: false } });
+      if (fake.mode === "no-credits") return route.fulfill({ status: 402, json: { error: `The ${FAKE_PROVIDERS[provider].label} account has no credits left for this request.`, code: "insufficient-credits", retryable: false } });
       return route.fulfill({ status: 202, json: { kind: "task", taskId: "task-fake-0001", status: "queued", verified: false } });
     }
-    if (request.method() === "DELETE") { fake.deletes += 1; return route.fulfill({ json: { ok: true, status: "cancelled" } }); }
-    if (new URL(request.url()).pathname.endsWith("/model")) return route.fulfill({ status: 200, contentType: "model/gltf-binary", body: boxGlb() });
-    fake.polls += 1;
+    const queryProvider = new URL(request.url()).searchParams.get("provider");
+    if (request.method() === "DELETE") { fake.deletes += 1; fake.deleteProviders.push(queryProvider); return route.fulfill({ json: { ok: true, status: "cancelled" } }); }
+    if (new URL(request.url()).pathname.endsWith("/model")) { fake.modelProviders.push(queryProvider); return route.fulfill({ status: 200, contentType: "model/gltf-binary", body: boxGlb() }); }
+    fake.polls += 1; fake.pollProviders.push(queryProvider);
     if (fake.mode === "hold") return route.fulfill({ json: { task: { providerTaskId: "task-fake-0001", status: "queued", progress: 0 } } });
     const n = fake.polls;
     if (n === 2) return route.fulfill({ status: 429, headers: { "retry-after": "1" }, json: { error: "limited", code: "rate-limited", retryable: true } });

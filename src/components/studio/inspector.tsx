@@ -7,6 +7,8 @@ import { LIMITS, type SpecEdit } from "@/lib/spec-edit";
 import { CAMERA_PRESETS, MODE_LABELS, PRESET_LABELS, VIEW_MODES } from "@/lib/viewer";
 import type { GenerationJob } from "@/lib/contracts";
 import { describeJob, isActiveJob } from "@/lib/hosted";
+import { isHostedProvider, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
+import { ProviderPicker, setupGuidance } from "./provider-picker";
 import { INTERPRETER_HELP } from "@/lib/typologies";
 import { NODE_LABELS, type LineageEntry } from "@/lib/workflow";
 
@@ -154,13 +156,16 @@ export type HostedPanelState = {
   cannotCancelNotice: boolean;
 };
 
-function HostedSection({ state, onAccessCode, onCancel, onDownload }: { state: HostedPanelState; onAccessCode: (value: string) => void; onCancel: () => void; onDownload: () => void }) {
+function HostedSection({ provider, catalog, state, onAccessCode, onCancel, onDownload }: { provider: Provider; catalog: ProviderCatalog | null; state: HostedPanelState; onAccessCode: (value: string) => void; onCancel: () => void; onDownload: () => void }) {
   const { job } = state;
   const active = job ? isActiveJob(job) : false;
+  const label = providerLabel(provider, catalog ?? undefined);
+  const jobLabel = job ? providerLabel(job.provider, catalog ?? undefined) : label;
+  const jobCanCancel = job ? providerSupportsCancel(job.provider, catalog ?? undefined) : false;
   return (
     <fieldset>
-      <legend>Hosted job · Meshy (unverified)</legend>
-      {!state.configured && <p className="inspector__hint">Hosted generation is disabled on this deployment. Set <code>MESHY_ENABLED</code>, <code>MESHY_API_KEY</code> and <code>MESHY_ACCESS_CODE</code> on the server to enable it; the local procedural provider keeps working.</p>}
+      <legend>Hosted job · {label} (unverified)</legend>
+      {!state.configured && <p className="inspector__hint">Hosted generation with {label} is disabled on this deployment. {setupGuidance(provider)} The local procedural provider keeps working.</p>}
       {state.configured && (
         <label className="field field--stack"><span>Access code (memory only)</span><input type="password" autoComplete="off" value={state.accessCode} onChange={(event) => onAccessCode(event.target.value)} /></label>
       )}
@@ -169,8 +174,9 @@ function HostedSection({ state, onAccessCode, onCancel, onDownload }: { state: H
           <p className="inspector__hint" role="status">{describeJob(job)}</p>
           {active && <div className="progress" role="progressbar" aria-valuenow={job.progress ?? 0} aria-valuemin={0} aria-valuemax={100}><i style={{ width: `${job.progress ?? 0}%` }} /></div>}
           {active && !state.accessCode && <p className="inspector__hint">Enter the access code to resume checking this task after a reload.</p>}
-          {active && <button type="button" className="ghost-button" onClick={onCancel}>{job.status === "queued" ? "Cancel task" : "Stop waiting"}</button>}
-          {state.cannotCancelNotice && <p className="inspector__hint">Meshy cannot cancel a task that is already running, so this app stopped waiting; the credits for it may still be spent.</p>}
+          {active && <button type="button" className="ghost-button" onClick={onCancel}>{job.status === "queued" && jobCanCancel ? "Cancel task" : "Stop waiting"}</button>}
+          {active && !jobCanCancel && <p className="inspector__hint">{jobLabel} tasks cannot be cancelled; this app can only stop waiting, and the credits may still be spent.</p>}
+          {state.cannotCancelNotice && <p className="inspector__hint">{jobCanCancel ? `${jobLabel} cannot cancel a task that is already running, so this app stopped waiting; the credits for it may still be spent.` : `${jobLabel} cannot cancel tasks, so this app only stopped waiting; the credits for it may still be spent.`}</p>}
         </>
       )}
       {state.error && <p role="alert" className="inspector__error">{state.error}</p>}
@@ -184,7 +190,7 @@ type Props = {
   spec?: BuildingSpec;
   blockedMessage?: string;
   provider: Provider;
-  meshyConfigured: boolean;
+  catalog: ProviderCatalog | null;
   revisionCount: number;
   versions: LineageEntry[];
   onRestore: (artifactId: string) => void;
@@ -204,7 +210,7 @@ type Props = {
   onDownloadHosted: () => void;
 };
 
-export function Inspector({ node, spec, blockedMessage, provider, meshyConfigured, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender, hosted, onAccessCode, onCancelJob, onDownloadHosted }: Props) {
+export function Inspector({ node, spec, blockedMessage, provider, catalog, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender, hosted, onAccessCode, onCancelJob, onDownloadHosted }: Props) {
   const editable = node && (node.type === "generation" || node.type === "variation") && spec;
   return (
     <aside className={`inspector ${collapsed ? "is-collapsed" : ""}`} aria-label="Node inspector">
@@ -218,13 +224,9 @@ export function Inspector({ node, spec, blockedMessage, provider, meshyConfigure
           {node?.type === "prompt" && <p className="inspector__hint">Write the brief in the node. {String(node.params.text ?? "").length}/800 characters. Connect it to a Generation node, then press Run.</p>}
           {(node?.type === "prompt" || node?.type === "variation") && <p className="inspector__hint">{INTERPRETER_HELP}</p>}
           {node?.type === "generation" && (
-            <fieldset>
-              <legend>Provider</legend>
-              <label className="radio"><input type="radio" name="provider" checked={provider === "procedural"} onChange={() => onProvider("procedural")} /> Local procedural <small>no account needed</small></label>
-              <label className="radio"><input type="radio" name="provider" checked={provider === "meshy"} disabled={!meshyConfigured && provider !== "meshy"} onChange={() => onProvider("meshy")} /> Meshy (paid) <small>{meshyConfigured ? "configured · unverified" : "unavailable — not configured on this server"}</small></label>
-            </fieldset>
+            <ProviderPicker provider={provider} catalog={catalog} onProvider={onProvider} />
           )}
-          {node?.type === "generation" && provider === "meshy" && <HostedSection state={hosted} onAccessCode={onAccessCode} onCancel={onCancelJob} onDownload={onDownloadHosted} />}
+          {node?.type === "generation" && (isHostedProvider(provider) || (hosted.job && isActiveJob(hosted.job))) && <HostedSection provider={isHostedProvider(provider) ? provider : (hosted.job?.provider ?? provider)} catalog={catalog} state={hosted} onAccessCode={onAccessCode} onCancel={onCancelJob} onDownload={onDownloadHosted} />}
           {editable && spec && (
             <>
               <p className="inspector__hint">{node.type === "generation" ? `Each change creates a new revision; earlier versions are kept (${revisionCount} so far).` : "Changes are stored on this variation; the source model stays untouched."}</p>

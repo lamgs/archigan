@@ -1,3 +1,4 @@
+import type { Provider } from "./contracts";
 import type { HostedTask } from "./hosted";
 
 /** Browser-side wrapper for the `/api/generate` hosted routes. Never sees the provider key; sends the user's access code. */
@@ -14,9 +15,9 @@ async function failure(response: Response): Promise<{ ok: false; error: HostedEr
 const networkError = (): { ok: false; error: HostedError } => ({ ok: false, error: { code: "network", message: "Could not reach the server.", retryable: true } });
 const headers = (code: string) => ({ "x-sift-access-code": code });
 
-export async function createHostedTask(input: { prompt: string; refinement: string; code: string }): Promise<Result<{ taskId: string }>> {
+export async function createHostedTask(input: { prompt: string; refinement: string; code: string; provider: Provider }): Promise<Result<{ taskId: string }>> {
   try {
-    const response = await fetch("/api/generate", { method: "POST", headers: { "content-type": "application/json", ...headers(input.code) }, body: JSON.stringify({ prompt: input.prompt, refinement: input.refinement, provider: "meshy", confirmSpend: true }) });
+    const response = await fetch("/api/generate", { method: "POST", headers: { "content-type": "application/json", ...headers(input.code) }, body: JSON.stringify({ prompt: input.prompt, refinement: input.refinement, provider: input.provider, confirmSpend: true }) });
     if (!response.ok) return await failure(response);
     const data = (await response.json()) as { taskId?: string };
     return data.taskId ? { ok: true, value: { taskId: data.taskId } } : { ok: false, error: { code: "bad-response", message: "The server did not return a task id.", retryable: false } };
@@ -25,9 +26,9 @@ export async function createHostedTask(input: { prompt: string; refinement: stri
   }
 }
 
-export async function fetchHostedTask(taskId: string, code: string): Promise<Result<HostedTask>> {
+export async function fetchHostedTask(provider: Provider, taskId: string, code: string): Promise<Result<HostedTask>> {
   try {
-    const response = await fetch(`/api/generate/${encodeURIComponent(taskId)}`, { headers: headers(code), cache: "no-store" });
+    const response = await fetch(`/api/generate/${encodeURIComponent(taskId)}?provider=${encodeURIComponent(provider)}`, { headers: headers(code), cache: "no-store" });
     if (!response.ok) return await failure(response);
     return { ok: true, value: ((await response.json()) as { task: HostedTask }).task };
   } catch {
@@ -35,18 +36,18 @@ export async function fetchHostedTask(taskId: string, code: string): Promise<Res
   }
 }
 
-export async function cancelHostedTask(taskId: string, code: string): Promise<Result<true>> {
+export async function cancelHostedTask(provider: Provider, taskId: string, code: string): Promise<Result<true>> {
   try {
-    const response = await fetch(`/api/generate/${encodeURIComponent(taskId)}`, { method: "DELETE", headers: headers(code) });
+    const response = await fetch(`/api/generate/${encodeURIComponent(taskId)}?provider=${encodeURIComponent(provider)}`, { method: "DELETE", headers: headers(code) });
     return response.ok ? { ok: true, value: true } : await failure(response);
   } catch {
     return networkError();
   }
 }
 
-export async function downloadHostedModel(taskId: string, code: string): Promise<Result<Blob>> {
+export async function downloadHostedModel(provider: Provider, taskId: string, code: string): Promise<Result<Blob>> {
   try {
-    const response = await fetch(`/api/generate/${encodeURIComponent(taskId)}/model`, { headers: headers(code), cache: "no-store" });
+    const response = await fetch(`/api/generate/${encodeURIComponent(taskId)}/model?provider=${encodeURIComponent(provider)}`, { headers: headers(code), cache: "no-store" });
     return response.ok ? { ok: true, value: await response.blob() } : await failure(response);
   } catch {
     return networkError();

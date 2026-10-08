@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { generationJobSchema, siftProjectV2Schema } from "./contracts";
-import { applyTaskUpdate, buildHostedArtifact, completeJob, describeJob, failJob, isActiveJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "./hosted";
+import { JOB_TIMEOUT_MS, applyTaskUpdate, buildHostedArtifact, completeJob, describeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "./hosted";
 import { createWorkflowProject, projectSignature } from "./projects";
 import { evaluateGraph } from "./workflow";
 
 const T0 = "2026-10-09T10:00:00.000Z";
 const T1 = "2026-10-09T10:01:00.000Z";
-const job = () => newHostedJob({ id: "j", nodeId: "n", taskId: "task-123456", now: T0 });
+const job = (provider: "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" = "meshy") => newHostedJob({ id: "j", nodeId: "n", taskId: "task-123456", provider, now: T0 });
 
 describe("hosted job state machine", () => {
   it("starts queued, active, and schema-valid", () => {
@@ -51,6 +51,25 @@ describe("hosted job state machine", () => {
     expect([0, 1, 2, 5, 50].map((n) => nextPollDelayMs(n))).toEqual([3000, 4500, 6000, 10500, 15000]);
     expect(nextPollDelayMs(0, 30)).toBe(30_000);
     expect(nextPollDelayMs(0, 9999)).toBe(120_000);
+  });
+  it("records the job's own provider and uses its label in messages and artifact origin", () => {
+    for (const [provider, label] of [["tripo", "Tripo"], ["hunyuan3d-rapid", "Hunyuan3D Rapid"], ["hunyuan3d-pro", "Hunyuan3D Pro"], ["meshy", "Meshy"]] as const) {
+      const j = job(provider);
+      expect(generationJobSchema.safeParse(j).success).toBe(true);
+      expect(j.provider).toBe(provider);
+      expect(isHostedJob(j)).toBe(true);
+      expect(describeJob(j)).toBe(`Queued at ${label}`);
+      expect(describeJob({ ...j, status: "rate-limited" })).toContain(label);
+      const stale = timeoutIfStale(j, Date.parse(T0) + JOB_TIMEOUT_MS + 1);
+      expect(stale.error?.message).toContain(label);
+      if (provider !== "meshy") expect(stale.error?.message).not.toContain("Meshy");
+      expect(buildHostedArtifact({ artifactId: "g", job: j, bytes: 1, now: T1 }).metadata.origin).toBe(provider);
+    }
+  });
+  it("still treats legacy saved jobs correctly", () => {
+    expect(isHostedJob({ provider: "meshy", providerTaskId: "t" })).toBe(true);
+    expect(isHostedJob({ provider: "procedural", providerTaskId: "t" })).toBe(false);
+    expect(describeJob({ ...job(), provider: "procedural" as never, status: "queued" })).toContain("Local procedural");
   });
   it("describes every status for the UI", () => {
     (["queued", "running", "completed", "failed", "cancelled", "timed-out", "rate-limited"] as const).forEach((status) => expect(describeJob({ ...job(), status }).length).toBeGreaterThan(3));

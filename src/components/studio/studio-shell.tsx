@@ -9,6 +9,7 @@ import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, projectSignature, renameProject, validateProjectName } from "@/lib/projects";
 import { SAMPLE_BLURBS, sampleProjects } from "@/lib/samples";
 import { applyTaskUpdate, buildHostedArtifact, completeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
+import { isHostedProvider, providerCost, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
 import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTask } from "@/lib/hosted-client";
 import { probeGpu, renderPng } from "@/lib/render-image";
 import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
@@ -52,7 +53,7 @@ function Studio() {
   const [nodes, setNodes, onNodesChange] = useNodesState<StudioFlowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [notice, setNotice] = useState("Ready to shape a study.");
-  const [meshyConfigured, setMeshyConfigured] = useState(false);
+  const [catalog, setCatalog] = useState<ProviderCatalog | null>(null);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [gpu, setGpu] = useState<GpuLimits | null | undefined>(undefined);
@@ -64,7 +65,7 @@ function Studio() {
   const openProjectId = useRef("pending");
   const [storageOk, setStorageOk] = useState<boolean | null>(null);
   const [accessCode, setAccessCode] = useState("");
-  const [confirm, setConfirm] = useState<{ nodeId: string; prompt: string } | null>(null);
+  const [confirm, setConfirm] = useState<{ nodeId: string; prompt: string; provider: Provider } | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [hostedError, setHostedError] = useState<string | null>(null);
@@ -78,7 +79,7 @@ function Studio() {
     void listProjects().then(setSaved).catch(() => setNotice("Local storage is unavailable; this session still works.")).finally(() => setLoadingProjects(false));
     void probeStorage().then(setStorageOk);
     queueMicrotask(() => setGpu(probeGpu())); // browser-only capability probe
-    void fetch("/api/providers").then((response) => response.json()).then((data: { meshy?: { configured?: boolean } }) => setMeshyConfigured(Boolean(data.meshy?.configured))).catch(() => setMeshyConfigured(false));
+    void fetch("/api/providers").then((response) => response.json()).then((data: ProviderCatalog) => setCatalog(data)).catch(() => setCatalog(null));
   }, []);
 
   const graph = useMemo<FlowGraph>(() => ({
@@ -248,32 +249,32 @@ function Studio() {
     }
   };
 
-  // ---- Hosted (Meshy) generation: explicit confirmation → create → poll → ingest GLB → persist -------------------------
+  // ---- Hosted generation (any provider): explicit confirmation → create → poll → ingest GLB → persist -------------------------
   const patchJob = useCallback((jobId: string, change: (job: GenerationJobT) => GenerationJobT) => setMeta((current) => (current.jobs[jobId] ? { ...current, jobs: { ...current.jobs, [jobId]: change(current.jobs[jobId]) } } : current)), []);
 
-  const startHosted = (nodeId: string) => {
+  const startHosted = (nodeId: string, hostedProvider: Provider) => {
     const source = graph.edges.find((edge) => edge.target === nodeId);
     const prompt = String(graph.nodes.find((node) => node.id === source?.source)?.params.text ?? "").trim();
     if (!prompt) return setNotice("Connect a Prompt node with a brief before generating.");
-    if (!meshyConfigured) return setNotice("Hosted generation is not configured on this deployment. Use the Local provider.");
+    if (!catalog?.[hostedProvider]?.configured) return setNotice(`${providerLabel(hostedProvider, catalog ?? undefined)} is not configured on this deployment. Use the Local provider.`);
     setConfirmError(null);
-    setConfirm({ nodeId, prompt });
+    setConfirm({ nodeId, prompt, provider: hostedProvider });
   };
 
   const confirmSpend = async () => {
     if (!confirm) return;
     setConfirmBusy(true);
     setConfirmError(null);
-    const created = await createHostedTask({ prompt: confirm.prompt, refinement: "", code: accessCode.trim() });
+    const created = await createHostedTask({ prompt: confirm.prompt, refinement: "", code: accessCode.trim(), provider: confirm.provider });
     setConfirmBusy(false);
     if (!created.ok) return setConfirmError(created.error.message);
-    const job = newHostedJob({ id: uid("job"), nodeId: confirm.nodeId, taskId: created.value.taskId, now: new Date().toISOString() });
+    const job = newHostedJob({ id: uid("job"), nodeId: confirm.nodeId, taskId: created.value.taskId, provider: confirm.provider as Exclude<Provider, "procedural">, now: new Date().toISOString() });
     const next = { ...meta, jobs: { ...meta.jobs, [job.id]: job } };
     setMeta(next);
     setConfirm(null);
     setHostedError(null);
     setCancelNotice(false);
-    setNotice("Meshy task started. You can keep working; progress is shown in the inspector.");
+    setNotice(`${providerLabel(confirm.provider, catalog ?? undefined)} task started. You can keep working; progress is shown in the inspector.`);
     void persist(next); // record the task id immediately so a reload cannot lose a paid task
   };
 
@@ -281,8 +282,8 @@ function Studio() {
     const job = latestJob;
     if (!job) return;
     const now = new Date().toISOString();
-    if (job.status === "queued" && job.providerTaskId && accessCode) {
-      const result = await cancelHostedTask(job.providerTaskId, accessCode.trim());
+    if (job.status === "queued" && job.providerTaskId && accessCode && providerSupportsCancel(job.provider, catalog ?? undefined)) {
+      const result = await cancelHostedTask(job.provider, job.providerTaskId, accessCode.trim());
       if (!result.ok && result.error.code !== "running") return setHostedError(result.error.message);
       setCancelNotice(!result.ok);
     } else setCancelNotice(true);
@@ -313,7 +314,7 @@ function Studio() {
         if (!job || !isActiveJob(job) || !job.providerTaskId) return;
         const stale = timeoutIfStale(job, Date.now());
         if (stale !== job) return patchJob(jobId, () => stale);
-        const status = await fetchHostedTask(job.providerTaskId, code);
+        const status = await fetchHostedTask(job.provider, job.providerTaskId, code);
         if (cancelled) return;
         const now = new Date().toISOString();
         let delay = nextPollDelayMs(attempt++);
@@ -322,7 +323,7 @@ function Studio() {
           if (error.code === "rate-limited") { patchJob(jobId, (current) => markRateLimited(current, now)); delay = nextPollDelayMs(attempt, error.retryAfterSeconds ?? 10); }
           else if (!error.retryable) return patchJob(jobId, (current) => failJob(current, { code: error.code, message: error.message, retryable: false }, now));
         } else if (status.value.status === "completed") {
-          const model = await downloadHostedModel(job.providerTaskId, code);
+          const model = await downloadHostedModel(job.provider, job.providerTaskId, code);
           if (cancelled) return;
           if (model.ok) {
             const artifact = buildHostedArtifact({ artifactId: uid("hosted"), job, bytes: model.value.size, now });
@@ -345,7 +346,7 @@ function Studio() {
 
   const run = (id: string) => {
     if (graph.nodes.find((node) => node.id === id)?.type === "render") return void renderNode(id);
-    if (meta.settings.provider === "meshy" && graph.nodes.find((node) => node.id === id)?.type === "generation") return startHosted(id);
+    if (isHostedProvider(meta.settings.provider) && graph.nodes.find((node) => node.id === id)?.type === "generation") return startHosted(id, meta.settings.provider);
     const result = runGeneration({ ...graph, artifacts: meta.artifacts, jobs: meta.jobs, revisions: meta.revisions }, id, meta.settings.provider, { artifact: uid("artifact"), job: uid("job"), revision: uid("rev") }, new Date().toISOString());
     if (!result.ok) return setNotice(result.message);
     record();
@@ -391,7 +392,7 @@ function Studio() {
     ? Object.values(meta.jobs).filter((job) => job.nodeId === selectedNode.id && isHostedJob(job)).sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))[0]
     : undefined;
   const hostedArtifact = selectedNode?.type === "generation" && typeof selectedNode.params.hostedArtifactId === "string" ? meta.artifacts[selectedNode.params.hostedArtifactId] : undefined;
-  const hostedKey = meta.settings.provider === "meshy" ? hostedArtifact?.storageKey : undefined;
+  const hostedKey = isHostedProvider(meta.settings.provider) ? hostedArtifact?.storageKey : undefined;
   useEffect(() => {
     let cancelled = false;
     if (hostedKey) void loadAsset(hostedKey).then((blob) => !cancelled && setHostedBlob(blob)).catch(() => !cancelled && setHostedBlob(null));
@@ -399,7 +400,7 @@ function Studio() {
     return () => { cancelled = true; };
   }, [hostedKey]);
   const hostedState = {
-    configured: meshyConfigured,
+    configured: Boolean(catalog?.[meta.settings.provider]?.configured),
     accessCode,
     job: latestJob,
     error: hostedError,
@@ -597,7 +598,7 @@ function Studio() {
 
   const setProvider = (provider: Provider) => {
     setMeta((current) => ({ ...current, settings: { ...current.settings, provider } }));
-    if (provider === "meshy") setNotice(meshyConfigured ? "Meshy is a paid provider: you will be asked to confirm before any credits are spent." : "Hosted generation is not configured on this deployment; the Local provider keeps working.");
+    if (isHostedProvider(provider)) setNotice(catalog?.[provider]?.configured ? `${providerLabel(provider, catalog)} is a paid provider: you will be asked to confirm before any credits are spent.` : "Hosted generation is not configured on this deployment; the Local provider keeps working.");
   };
   const provider = meta.settings.provider;
   const saveLabel = view !== "studio" ? { state: "idle", text: "" }
@@ -637,7 +638,7 @@ function Studio() {
           </nav>
 
           <section className={`canvas-panel ${inspectorCollapsed || !selectedNode ? "canvas-panel--inspector-collapsed" : "canvas-panel--inspector-open"}`} aria-label="Generation workflow">
-            <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><span className="provider-chip" title="Change the provider in the Generation node inspector">{provider === "procedural" ? "Local procedural" : "Meshy (unverified)"}</span></header>
+            <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><span className="provider-chip" title="Change the provider in the Generation node inspector">{provider === "procedural" ? "Local procedural" : `${providerLabel(provider, catalog ?? undefined)} (unverified)`}</span></header>
             <div className="add-toolbar" role="toolbar" aria-label="Add node">
               <button type="button" className="toolbar-icon" aria-label="Undo" title="Undo (Ctrl/⌘+Z)" disabled={!historyState.canUndo} onClick={undo}>↶</button>
               <button type="button" className="toolbar-icon" aria-label="Redo" title="Redo (Ctrl/⌘+Shift+Z)" disabled={!historyState.canRedo} onClick={redo}>↷</button>
@@ -656,7 +657,7 @@ function Studio() {
               spec={selectedSpec}
               blockedMessage={selectedResult?.status === "blocked" ? selectedResult.message : undefined}
               provider={provider}
-              meshyConfigured={meshyConfigured}
+              catalog={catalog}
               revisionCount={Object.keys(meta.revisions).length}
               versions={selectedId ? versionsOf(meta, selectedId, selectedNode?.artifactId) : []}
               onRestore={restore}
@@ -680,13 +681,13 @@ function Studio() {
           </section>
 
           {preview || hostedBlob ? (
-            <ModelPreview spec={hostedBlob ? undefined : preview?.spec} hosted={hostedBlob ? { blob: hostedBlob, label: "Meshy GLB" } : undefined} provider={provider} stale={!hostedBlob && Boolean(preview?.stale)} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
+            <ModelPreview spec={hostedBlob ? undefined : preview?.spec} hosted={hostedBlob ? { blob: hostedBlob, label: `${providerLabel(hostedArtifact?.metadata.origin as string ?? provider, catalog ?? undefined)} GLB` } : undefined} provider={provider} stale={!hostedBlob && Boolean(preview?.stale)} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
           ) : (
             <aside className="preview-panel preview-panel--loading" aria-label="3D study preview"><p>No model yet. Write a brief, connect it to a Generation node, and press Run.</p></aside>
           )}
         </section>
       )}
-      {confirm && <PaidConfirm prompt={confirm.prompt} accessCode={accessCode} onAccessCode={setAccessCode} busy={confirmBusy} error={confirmError} onConfirm={() => void confirmSpend()} onCancel={() => setConfirm(null)} />}
+      {confirm && <PaidConfirm providerLabel={providerLabel(confirm.provider, catalog ?? undefined)} costLabel={providerCost(confirm.provider, catalog ?? undefined)} supportsCancel={providerSupportsCancel(confirm.provider, catalog ?? undefined)} prompt={confirm.prompt} accessCode={accessCode} onAccessCode={setAccessCode} busy={confirmBusy} error={confirmError} onConfirm={() => void confirmSpend()} onCancel={() => setConfirm(null)} />}
     </main>
   );
 }

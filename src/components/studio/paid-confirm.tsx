@@ -3,6 +3,9 @@
 import { useEffect, useRef } from "react";
 
 type Props = {
+  providerLabel: string;
+  costLabel: string;
+  supportsCancel: boolean;
   prompt: string;
   accessCode: string;
   onAccessCode: (value: string) => void;
@@ -13,7 +16,7 @@ type Props = {
 };
 
 /** Explicit paid-generation confirmation that names the provider before any request is made. */
-export function PaidConfirm({ prompt, accessCode, onAccessCode, busy, error, onConfirm, onCancel }: Props) {
+export function PaidConfirm({ providerLabel, costLabel, supportsCancel, prompt, accessCode, onAccessCode, busy, error, onConfirm, onCancel }: Props) {
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     cancel.current?.focus();
@@ -24,9 +27,10 @@ export function PaidConfirm({ prompt, accessCode, onAccessCode, busy, error, onC
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="modal" role="alertdialog" aria-modal="true" aria-labelledby="paid-title" aria-describedby="paid-body">
-        <h2 id="paid-title">Spend Meshy credits?</h2>
+        <h2 id="paid-title">Spend {providerLabel} credits?</h2>
         <div id="paid-body">
-          <p>This sends your brief to <strong>Meshy</strong>, a paid third-party service, and uses credits on the Meshy account connected to this deployment. It cannot be undone, and a running task cannot be cancelled.</p>
+          <p>This sends your brief to <strong>{providerLabel}</strong>, a paid third-party service, and uses credits on the {providerLabel} account connected to this deployment. It cannot be undone, and {supportsCancel ? "a task can only be cancelled while it is still queued." : "a task cannot be cancelled once started; the app can only stop waiting."}</p>
+          <p className="modal__fine">Approximate cost per generation: {costLabel} (an estimate from public pricing, not a quote).</p>
           <blockquote>{prompt}</blockquote>
           <p className="modal__fine">The result is a fixed mesh (not editable geometry). Hosted generation has not been verified against a live account yet.</p>
         </div>
@@ -35,7 +39,7 @@ export function PaidConfirm({ prompt, accessCode, onAccessCode, busy, error, onC
         {error && <p role="alert" className="inspector__error">{error}</p>}
         <div className="modal__actions">
           <button ref={cancel} type="button" className="ghost-button" onClick={onCancel} disabled={busy}>Cancel</button>
-          <button type="button" className="generate-button modal__go" onClick={onConfirm} disabled={busy || !accessCode.trim()}>{busy ? "Contacting Meshy…" : "Spend credits & generate"}</button>
+          <button type="button" className="generate-button modal__go" onClick={onConfirm} disabled={busy || !accessCode.trim()}>{busy ? `Contacting ${providerLabel}…` : "Spend credits & generate"}</button>
         </div>
       </div>
     </div>

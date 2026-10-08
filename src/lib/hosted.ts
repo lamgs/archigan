@@ -1,4 +1,5 @@
-import type { Artifact, GenerationJob } from "./contracts";
+import type { Artifact, GenerationJob, Provider } from "./contracts";
+import { providerLabel } from "./provider-meta";
 
 /** Pure state logic for provider-neutral hosted generation jobs (no network, no React). */
 
@@ -11,8 +12,8 @@ export const JOB_TIMEOUT_MS = 20 * 60_000;
 export const isActiveJob = (job: Pick<GenerationJob, "status">) => !TERMINAL.includes(job.status);
 export const isHostedJob = (job: Pick<GenerationJob, "provider" | "providerTaskId">) => job.provider !== "procedural" && Boolean(job.providerTaskId);
 
-export function newHostedJob(input: { id: string; nodeId: string; taskId: string; now: string }): GenerationJob {
-  return { id: input.id, nodeId: input.nodeId, provider: "meshy", providerTaskId: input.taskId, status: "queued", progress: 0, createdAt: input.now, updatedAt: input.now };
+export function newHostedJob(input: { id: string; nodeId: string; taskId: string; provider: Exclude<Provider, "procedural">; now: string }): GenerationJob {
+  return { id: input.id, nodeId: input.nodeId, provider: input.provider, providerTaskId: input.taskId, status: "queued", progress: 0, createdAt: input.now, updatedAt: input.now };
 }
 
 /** Folds a provider status report into a job. Finished jobs are never reopened, and progress never moves backwards. */
@@ -36,7 +37,7 @@ export function markRateLimited(job: GenerationJob, now: string): GenerationJob 
 /** Jobs that have been active for longer than `limitMs` become `timed-out` (the provider may still finish, but we stop waiting). */
 export function timeoutIfStale(job: GenerationJob, nowMs: number, limitMs = JOB_TIMEOUT_MS): GenerationJob {
   if (!isActiveJob(job) || !job.createdAt || nowMs - Date.parse(job.createdAt) < limitMs) return job;
-  return { ...job, status: "timed-out", updatedAt: new Date(nowMs).toISOString(), error: { code: "timeout", message: "Meshy took too long, so this app stopped waiting. The task may still finish on the Meshy side.", retryable: true } };
+  return { ...job, status: "timed-out", updatedAt: new Date(nowMs).toISOString(), error: { code: "timeout", message: `${providerLabel(job.provider)} took too long, so this app stopped waiting. The task may still finish on the ${providerLabel(job.provider)} side.`, retryable: true } };
 }
 
 export function userCancel(job: GenerationJob, now: string): GenerationJob {
@@ -56,7 +57,7 @@ export function buildHostedArtifact(input: { artifactId: string; job: Generation
     sourceNodeId: input.job.nodeId,
     createdAt: input.now,
     storageKey: `asset:${input.artifactId}`,
-    metadata: { origin: "meshy", providerTaskId: input.job.providerTaskId ?? null, bytes: input.bytes, verified: false, ...(input.job.outputExpiresAt && { providerExpiresAt: input.job.outputExpiresAt }) },
+    metadata: { origin: input.job.provider, providerTaskId: input.job.providerTaskId ?? null, bytes: input.bytes, verified: false, ...(input.job.outputExpiresAt && { providerExpiresAt: input.job.outputExpiresAt }) },
   };
 }
 
@@ -68,9 +69,9 @@ export function completeJob(job: GenerationJob, artifactId: string, now: string)
 
 export function describeJob(job: GenerationJob): string {
   switch (job.status) {
-    case "queued": return "Queued at Meshy";
+    case "queued": return `Queued at ${providerLabel(job.provider)}`;
     case "running": return job.progress && job.progress >= 100 ? "Downloading the model" : `Generating${job.progress ? ` · ${job.progress}%` : ""}`;
-    case "rate-limited": return "Meshy is rate limiting; retrying shortly";
+    case "rate-limited": return `${providerLabel(job.provider)} is rate limiting; retrying shortly`;
     case "completed": return "Hosted model saved in this browser";
     case "cancelled": return "Cancelled";
     case "timed-out": return job.error?.message ?? "Timed out";

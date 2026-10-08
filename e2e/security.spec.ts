@@ -22,7 +22,7 @@ test("no provider secrets, URLs, auth headers, or server-env reads reach the bro
   await page.locator(".dashboard__featured").click();
   await expect(page.locator(".preview-panel__caption")).toBeVisible();
   const providers = await (await page.request.get("/api/providers")).json();
-  expect(Object.keys(providers.meshy).sort()).toEqual(["accessCodeRequired", "configured", "enabled", "hasKey", "verified"]);
+  expect(Object.keys(providers.meshy).sort()).toEqual(["accessCodeRequired", "configured", "costLabel", "enabled", "hasKey", "label", "supportsCancel", "verified"]);
   expect(JSON.stringify(providers)).not.toMatch(/key"\s*:\s*"/i);
   expect(seen.join("\n")).not.toMatch(/api\.meshy\.ai|msy_|Bearer /);
 });
