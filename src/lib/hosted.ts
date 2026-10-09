@@ -1,4 +1,4 @@
-import type { Artifact, GenerationJob, Provider } from "./contracts";
+import { isSupportedProvider, type Artifact, type GenerationJob, type Provider } from "./contracts";
 import { providerLabel } from "./provider-meta";
 
 /** Pure state logic for provider-neutral hosted generation jobs (no network, no React). */
@@ -11,6 +11,21 @@ export const JOB_TIMEOUT_MS = 20 * 60_000;
 
 export const isActiveJob = (job: Pick<GenerationJob, "status">) => !TERMINAL.includes(job.status);
 export const isHostedJob = (job: Pick<GenerationJob, "provider" | "providerTaskId">) => job.provider !== "procedural" && Boolean(job.providerTaskId);
+
+/** ADR-018: a job whose provider was removed from the product (meshy, hunyuan3d-*, tencent-*) can no longer be polled. */
+export const isRetiredProviderJob = (job: Pick<GenerationJob, "provider">) => job.provider !== "procedural" && !isSupportedProvider(job.provider);
+
+export const retiredProviderError = (provider: string) => ({ code: "unsupported-provider", message: `${providerLabel(provider)} is no longer supported, so this job cannot be resumed. Start a new generation with Local procedural or Tripo.`, retryable: false });
+
+/**
+ * Marks an active job from a removed provider as failed with a readable message (the shell calls this before polling;
+ * it is also the right reaction to a non-retryable `unknown-provider`/`unsupported-provider` server answer).
+ */
+export function failIfRetiredProvider(job: GenerationJob, now: string): GenerationJob {
+  return isRetiredProviderJob(job) && isActiveJob(job) ? failJob(job, retiredProviderError(job.provider), now) : job;
+}
+
+export const isUnknownProviderError = (error: { code: string }) => error.code === "unknown-provider" || error.code === "unsupported-provider";
 
 export function newHostedJob(input: { id: string; nodeId: string; taskId: string; provider: Exclude<Provider, "procedural">; now: string }): GenerationJob {
   return { id: input.id, nodeId: input.nodeId, provider: input.provider, providerTaskId: input.taskId, status: "queued", progress: 0, createdAt: input.now, updatedAt: input.now };

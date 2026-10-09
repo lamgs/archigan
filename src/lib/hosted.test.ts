@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { generationJobSchema, siftProjectV2Schema } from "./contracts";
-import { JOB_TIMEOUT_MS, applyTaskUpdate, buildHostedArtifact, completeJob, describeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "./hosted";
+import { JOB_TIMEOUT_MS, failIfRetiredProvider, isRetiredProviderJob, isUnknownProviderError, applyTaskUpdate, buildHostedArtifact, completeJob, describeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "./hosted";
 import { createWorkflowProject, projectSignature } from "./projects";
 import { evaluateGraph } from "./workflow";
 
 const T0 = "2026-10-09T10:00:00.000Z";
 const T1 = "2026-10-09T10:01:00.000Z";
-const job = (provider: "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" = "meshy") => newHostedJob({ id: "j", nodeId: "n", taskId: "task-123456", provider, now: T0 });
+const job = (provider: "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" = "tripo") => newHostedJob({ id: "j", nodeId: "n", taskId: "task-123456", provider, now: T0 });
 
 describe("hosted job state machine", () => {
   it("starts queued, active, and schema-valid", () => {
     expect(generationJobSchema.safeParse(job()).success).toBe(true);
-    expect(job()).toMatchObject({ provider: "meshy", status: "queued", providerTaskId: "task-123456" });
+    expect(job()).toMatchObject({ provider: "tripo", status: "queued", providerTaskId: "task-123456" });
     expect(isActiveJob(job())).toBe(true);
   });
   it("walks queued → running → completed, with monotonic progress", () => {
@@ -53,7 +53,7 @@ describe("hosted job state machine", () => {
     expect(nextPollDelayMs(0, 9999)).toBe(120_000);
   });
   it("records the job's own provider and uses its label in messages and artifact origin", () => {
-    for (const [provider, label] of [["tripo", "Tripo"], ["hunyuan3d-rapid", "Hunyuan3D Rapid"], ["hunyuan3d-pro", "Hunyuan3D Pro"], ["meshy", "Meshy"]] as const) {
+    for (const [provider, label] of [["tripo", "Tripo"], ["hunyuan3d-pro", "hunyuan3d-pro"], ["meshy", "meshy"]] as const) {
       const j = job(provider);
       expect(generationJobSchema.safeParse(j).success).toBe(true);
       expect(j.provider).toBe(provider);
@@ -62,7 +62,6 @@ describe("hosted job state machine", () => {
       expect(describeJob({ ...j, status: "rate-limited" })).toContain(label);
       const stale = timeoutIfStale(j, Date.parse(T0) + JOB_TIMEOUT_MS + 1);
       expect(stale.error?.message).toContain(label);
-      if (provider !== "meshy") expect(stale.error?.message).not.toContain("Meshy");
       expect(buildHostedArtifact({ artifactId: "g", job: j, bytes: 1, now: T1 }).metadata.origin).toBe(provider);
     }
   });
@@ -79,7 +78,7 @@ describe("hosted job state machine", () => {
 describe("hosted artifacts and reload safety", () => {
   it("builds an unverified model-glb artifact pointing at a local asset", () => {
     const a = buildHostedArtifact({ artifactId: "glb-1", job: { ...job(), outputExpiresAt: "2026-10-12T10:00:00.000Z" }, bytes: 2048, now: T1 });
-    expect(a).toMatchObject({ kind: "model-glb", sourceNodeId: "n", storageKey: "asset:glb-1", metadata: { origin: "meshy", providerTaskId: "task-123456", bytes: 2048, verified: false, providerExpiresAt: "2026-10-12T10:00:00.000Z" } });
+    expect(a).toMatchObject({ kind: "model-glb", sourceNodeId: "n", storageKey: "asset:glb-1", metadata: { origin: "tripo", providerTaskId: "task-123456", bytes: 2048, verified: false, providerExpiresAt: "2026-10-12T10:00:00.000Z" } });
   });
   it("persists in-flight jobs and hosted results in the project record and round-trips through JSON", () => {
     const base = createWorkflowProject({ id: "p", name: "Hosted", now: T0, prompt: "A tower", refinement: "" });
@@ -102,5 +101,20 @@ describe("hosted artifacts and reload safety", () => {
     const nodes = base.graph.nodes.map((n) => (n.id === "p-generation" ? { ...n, artifactId: undefined, params: { hostedArtifactId: "glb-1" } } : n));
     const r = evaluateGraph({ nodes, edges: base.graph.edges }, {})["p-generation"];
     expect(r).toMatchObject({ status: "blocked", message: expect.stringMatching(/no editable geometry/) });
+  });
+  it("fails an active job from a removed provider cleanly, with a readable message, and leaves other jobs alone", () => {
+    const old = job("hunyuan3d-pro");
+    expect(isRetiredProviderJob(old)).toBe(true);
+    expect(isRetiredProviderJob(job("tripo"))).toBe(false);
+    const failed = failIfRetiredProvider(old, T1);
+    expect(failed).toMatchObject({ status: "failed", provider: "hunyuan3d-pro", error: { code: "unsupported-provider", retryable: false } });
+    expect(failed.error?.message).toMatch(/no longer supported/);
+    expect(generationJobSchema.safeParse(failed).success).toBe(true);
+    const tripo = job("tripo");
+    expect(failIfRetiredProvider(tripo, T1)).toBe(tripo);
+    const done = completeJob(old, "a", T1);
+    expect(failIfRetiredProvider(done, T1)).toBe(done);
+    expect(isUnknownProviderError({ code: "unknown-provider" })).toBe(true);
+    expect(isUnknownProviderError({ code: "rate-limited" })).toBe(false);
   });
 });

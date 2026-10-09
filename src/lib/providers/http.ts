@@ -1,7 +1,7 @@
 import { DOWNLOAD_TIMEOUT_MS, ProviderError, REQUEST_TIMEOUT_MS, type Fetch, type HostedProvider } from "./types";
 
 /** Shared HTTP error mapping. `vendor` is only used in user-facing messages. */
-export function mapHttpError(status: number, retryAfter?: string | null, vendor = "Meshy"): ProviderError {
+export function mapHttpError(status: number, retryAfter?: string | null, vendor = "Tripo"): ProviderError {
   const seconds = retryAfter && Number.isFinite(Number(retryAfter)) ? Math.max(1, Math.round(Number(retryAfter))) : undefined;
   if (status === 401 || status === 403) return new ProviderError("auth", `${vendor} rejected the server's API key.`, status, false);
   if (status === 402) return new ProviderError("insufficient-credits", `The ${vendor} account has no credits left for this request.`, status, false);
@@ -56,7 +56,7 @@ export async function downloadGlbFor(provider: Pick<HostedProvider, "label" | "a
 
 export const clampProgress = (value: number | undefined) => (value === undefined || !Number.isFinite(value) ? undefined : Math.max(0, Math.min(100, Math.round(value))));
 
-/** Shared fail-closed config: enabled flag + own key + a shared access code (SIFT_ACCESS_CODE, falling back to MESHY_ACCESS_CODE). */
+/** Shared fail-closed config: enabled flag + own key + a shared access code (SIFT_ACCESS_CODE). */
 export function hostedConfig(env: Record<string, string | undefined>, enabledVar: string, keyVars: string[]) {
   const enabled = env[enabledVar] === "true";
   const hasKey = keyVars.every((name) => Boolean(env[name]));
@@ -64,4 +64,4 @@ export function hostedConfig(env: Record<string, string | undefined>, enabledVar
   return { configured: enabled && hasKey && accessCodeRequired, enabled, hasKey, accessCodeRequired, verified: false as const };
 }
 
-export const sharedAccessCode = (env: Record<string, string | undefined>) => env.SIFT_ACCESS_CODE || env.MESHY_ACCESS_CODE || undefined;
+export const sharedAccessCode = (env: Record<string, string | undefined>) => env.SIFT_ACCESS_CODE || undefined;

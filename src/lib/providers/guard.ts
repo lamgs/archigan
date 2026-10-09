@@ -35,7 +35,7 @@ export class SpendLimiter {
 }
 
 export function limitsFromEnv(env: Record<string, string | undefined>): SpendLimits {
-  const daily = Number(env.SIFT_DAILY_LIMIT || env.MESHY_DAILY_LIMIT);
+  const daily = Number(env.SIFT_DAILY_LIMIT);
   return { ...DEFAULT_LIMITS, dailyMax: Number.isInteger(daily) && daily > 0 ? daily : DEFAULT_LIMITS.dailyMax };
 }
 
@@ -47,7 +47,7 @@ export function codeMatches(provided: string | null | undefined, expected: strin
 }
 
 /** Checks that the provider is fully configured, then the shared access code (required for every hosted call, including polling). */
-export function authorize(headers: Headers, env: Record<string, string | undefined>, provider: HostedProviderId = "meshy"): GuardResult {
+export function authorize(headers: Headers, env: Record<string, string | undefined>, provider: HostedProviderId = "tripo"): GuardResult {
   if (!getProvider(provider).config(env).configured) return { ok: false, status: 503, code: "not-configured", message: "Hosted generation is not configured on this deployment." };
   if (!codeMatches(headers.get("x-sift-access-code"), sharedAccessCode(env))) return { ok: false, status: 401, code: "access-denied", message: "A valid access code is required for hosted generation." };
   return { ok: true };

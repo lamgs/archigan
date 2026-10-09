@@ -19,9 +19,9 @@ export function providerErrorResponse(error: unknown) {
   return NextResponse.json({ error: "Hosted generation failed.", code: "unexpected", retryable: false }, { status: 502 });
 }
 
-/** Common checks for the per-task routes (status, cancel, model download). `?provider=` selects the adapter (default `meshy` for older clients). */
+/** Common checks for the per-task routes (status, cancel, model download). `?provider=` selects the adapter (default `tripo`; unknown or removed ids answer 400 `unknown-provider`). */
 export async function taskRequest(request: Request, params: Promise<{ taskId: string }>): Promise<{ response: Response } | { taskId: string; provider: HostedProvider }> {
-  const requested = new URL(request.url).searchParams.get("provider") ?? "meshy";
+  const requested = new URL(request.url).searchParams.get("provider") ?? "tripo";
   if (!isHostedProviderId(requested)) return { response: NextResponse.json({ error: "Unknown provider.", code: "unknown-provider" }, { status: 400 }) };
   const auth = authorize(request.headers, process.env, requested);
   if (!auth.ok) return { response: guardResponse(auth) };

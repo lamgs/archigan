@@ -12,7 +12,7 @@ Browser (Next.js App Router, client-rendered studio)
         │               src/lib/typologies.ts prompt → BuildingSpec (offline "local interpreter")
         │               src/lib/contracts.ts  Zod schemas — the compatibility boundary (schema v2)
         ├─ src/lib/storage.ts ─▶ IndexedDB: `sift-projects` (project records) + `sift-assets` (render PNGs, hosted GLBs)
-        └─ /api/generate/* ──▶ src/lib/providers/* (server only): provider registry + adapters (Meshy, Tripo, Hunyuan3D), access-code + rate guard
+        └─ /api/generate/* ──▶ src/lib/providers/* (server only): provider registry + adapters (Tripo), access-code + rate guard
 
 Legacy PyTorch prototype (repo root): preserved for provenance, disconnected from the product.
 ```
@@ -32,7 +32,7 @@ The browser owns project state and procedural generation. Next.js route handlers
 | `src/lib/limits.ts` | Triangle/mesh budgets |
 | `src/lib/migrate.ts`, `backup.ts` | v1→v2 migration, store reconciliation; JSON backup/import |
 | `src/lib/hosted.ts`, `hosted-client.ts` | Provider-neutral job state machine (pure); browser API wrapper |
-| `src/lib/providers/` | **Server-only**: `types.ts` (HostedProvider interface), `registry.ts`, adapters `meshy.ts` / `tripo.ts` / `hunyuan.ts`, shared `http.ts` (errors, allowlisted GLB download), `guard.ts`, `hosted-http.ts` |
+| `src/lib/providers/` | **Server-only**: `types.ts` (HostedProvider interface), `registry.ts`, adapter `tripo.ts` (the only one; ADR-018), shared `http.ts` (errors, allowlisted GLB download), `guard.ts`, `hosted-http.ts` |
 | `src/lib/storage.ts` | The only IndexedDB dependency: projects, assets, tombstones, probe |
 | `src/lib/samples.ts`, `projects.ts` | Bundled samples (built from domain functions), project helpers |
 | `src/components/studio/` | `studio-shell` (state + orchestration), `studio-node`, `inspector`, `model-preview`, `dashboard`, `paid-confirm`, `viewer-fallback` |
@@ -47,7 +47,7 @@ type SiftProjectV2 = {
   artifacts: Record<string, Artifact>;
   jobs: Record<string, GenerationJob>;
   revisions: Record<string, DesignRevision>;
-  settings: { provider: "procedural" | "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" | "tencent-rapid" | "tencent-pro"; viewer?: ViewerSettings };
+  settings: { provider: "procedural" | "tripo" (legacy values meshy | hunyuan3d-* | tencent-* still parse and are coerced to "procedural" on load); viewer?: ViewerSettings };
 };
 ```
 
@@ -70,11 +70,11 @@ Node types: `prompt`, `generation`, `variation`, `model`, `render`. Ports carry 
 ## Generation contract
 
 - `procedural`: runs in the browser (`runGeneration`); no network.
-- Hosted providers (optional, all **unverified live**): `meshy`, `tripo` (v3), `hunyuan3d-rapid`, `hunyuan3d-pro` (fal.ai queue), `tencent-rapid`, `tencent-pro` (Tencent Cloud `ai3d`, TC3-signed, no SDK), each implementing `HostedProvider` (`create` / `status` / `cancel`, plus label, approximate cost label, `supportsCancel`, asset-host allowlist, size cap, `config(env)`). A provider is configured only if its own flag + key and the shared `SIFT_ACCESS_CODE` (fallback `MESHY_ACCESS_CODE`) are set. Routes: `POST /api/generate` (header `x-sift-access-code`; body `provider`, `confirmSpend: true`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (normalized status / cancel where supported — Tripo has no known cancel), `GET /api/generate/{taskId}/model?provider=<id>` (fresh task lookup, host-allowlisted, size-capped GLB download), `GET /api/providers` (secret-free catalog). The browser polls with backoff using each job's own provider, resumes after reload (re-entering the access code), and stores the GLB locally rather than relying on expiring signed URLs. See ADR-016/017.
+- Hosted provider (optional, **unverified live**): `tripo` (v3) is the only one (ADR-018), implementing `HostedProvider` (`create` / `status` / `cancel`, plus label, approximate cost label, `supportsCancel`, asset-host allowlist, size cap, `config(env)`). A provider is configured only if its own flag + key and the shared `SIFT_ACCESS_CODE` are set. Routes: `POST /api/generate` (header `x-sift-access-code`; body `provider`, `confirmSpend: true`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (default `tripo`; unknown/removed ids answer 400 `unknown-provider`; normalized status; Tripo has no known cancel, so DELETE answers 501). Removed provider ids in `POST /api/generate` answer 400 `unsupported-provider`, `GET /api/generate/{taskId}/model?provider=<id>` (fresh task lookup, host-allowlisted, size-capped GLB download), `GET /api/providers` (secret-free catalog). The browser polls with backoff using each job's own provider, resumes after reload (re-entering the access code), and stores the GLB locally rather than relying on expiring signed URLs. See ADR-016/017.
 
 ## Security and privacy
 
-- Provider keys (`MESHY_API_KEY`, `TRIPO_API_KEY`, `FAL_KEY`, `TENCENT_SECRET_ID`/`TENCENT_SECRET_KEY`) are server-only; it is never serialized, logged, returned, or stored client-side. Hosted calls require the access code (constant-time compare), explicit confirmation, and pass per-IP/daily limits shared across providers (per server instance).
+- The provider key (`TRIPO_API_KEY`) is server-only; it is never serialized, logged, returned, or stored client-side. Hosted calls require the access code (constant-time compare), explicit confirmation, and pass per-IP/daily limits shared across providers (per server instance).
 - Signed asset URLs never reach the browser; only HTTPS URLs on each provider's allowlisted hosts are fetched server-side (redirects refused).
 - Prompts and models are user content; there is no analytics capture. Project data stays in the visitor's browser.
 
@@ -88,7 +88,7 @@ Unsupported WebGL, context loss, render errors, over-complex models, unavailable
 
 ## Testing strategy
 
-- **Unit/domain** (Vitest, node): contracts, migration, graph, geometry, workflow, edits, render settings, hosted jobs, limits, backup, samples, persistence (fake-indexeddb), Meshy adapter + routes (mocked fetch).
+- **Unit/domain** (Vitest, node): contracts, migration, graph, geometry, workflow, edits, render settings, hosted jobs, limits, backup, samples, persistence (fake-indexeddb), Tripo adapter + routes (mocked fetch).
 - **Component** (Vitest + jsdom): dashboard, inspector, paid-confirm dialog, viewer fallback/boundary.
 - **End-to-end** (Playwright, production build): the ten acceptance scenarios, the featured sample, four responsive widths, axe WCAG A/AA scans; screenshots in `docs/evidence/`.
 - **Provider**: contract tests use mocked HTTP; live smoke tests are manual and opt-in because they consume credits.

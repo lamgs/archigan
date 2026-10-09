@@ -4,7 +4,7 @@ import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTas
 afterEach(() => vi.unstubAllGlobals());
 
 describe("hosted client is provider-aware", () => {
-  it.each(["meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro"] as const)("sends %s in the body and the ?provider= query", async (provider) => {
+  it.each(["tripo"] as const)("sends %s in the body and the ?provider= query", async (provider) => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ taskId: "t1", task: { providerTaskId: "t1", status: "queued" } }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await createHostedTask({ prompt: "p", refinement: "", code: "c", provider });

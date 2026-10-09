@@ -3,25 +3,21 @@
 // Usage:  node --env-file=.env.local scripts/check-hosted-config.mjs [--url https://your-deployment]
 // --url additionally does one read-only GET of your own app's /api/providers (never a vendor API).
 
-const PROVIDERS = [
-  { id: "hunyuan3d-rapid/pro", label: "Hunyuan3D via fal.ai", flag: "HUNYUAN_ENABLED", keys: ["FAL_KEY"] },
-  { id: "tencent-rapid/pro", label: "HY 3D via Tencent Cloud", flag: "TENCENT_HY3D_ENABLED", keys: ["TENCENT_SECRET_ID", "TENCENT_SECRET_KEY"] },
-  { id: "tripo", label: "Tripo", flag: "TRIPO_ENABLED", keys: ["TRIPO_API_KEY"] },
-  { id: "meshy", label: "Meshy", flag: "MESHY_ENABLED", keys: ["MESHY_API_KEY"] },
-];
+const PROVIDERS = [{ id: "tripo", label: "Tripo", flag: "TRIPO_ENABLED", keys: ["TRIPO_API_KEY"] }];
 
 /** Pure: evaluates an env object. Returns per-provider status plus global warnings. */
 export function evaluate(rawEnv) {
   // A value still set to the REPLACE_ME placeholder counts as missing.
   const env = Object.fromEntries(Object.entries(rawEnv).map(([k, v]) => [k, typeof v === "string" && v.startsWith("REPLACE_ME") ? "" : v]));
-  const code = env.SIFT_ACCESS_CODE || env.MESHY_ACCESS_CODE || "";
+  const code = env.SIFT_ACCESS_CODE || "";
   const warnings = [];
   if (!code) warnings.push("No access code: set SIFT_ACCESS_CODE. Without it NO hosted provider can be enabled (fail closed).");
   else if (code.length < 12) warnings.push("The access code is shorter than 12 characters; anyone who has it can spend your credits. Use a long random value.");
-  if (!env.SIFT_ACCESS_CODE && env.MESHY_ACCESS_CODE) warnings.push("Using the legacy MESHY_ACCESS_CODE fallback; prefer SIFT_ACCESS_CODE.");
-  const leaked = Object.keys(env).filter((name) => name.startsWith("NEXT_PUBLIC_") && /KEY|SECRET|TOKEN|ACCESS_CODE|FAL|TRIPO|MESHY/i.test(name));
+  const removed = ["MESHY_ACCESS_CODE", "MESHY_DAILY_LIMIT", "MESHY_ENABLED", "MESHY_API_KEY", "HUNYUAN_ENABLED", "FAL_KEY", "TENCENT_HY3D_ENABLED", "TENCENT_SECRET_ID", "TENCENT_SECRET_KEY"].filter((name) => env[name]);
+  if (removed.length) warnings.push(`Ignored settings for removed providers (ADR-018): ${removed.join(", ")}. Only Tripo, SIFT_ACCESS_CODE and SIFT_DAILY_LIMIT are read.`);
+  const leaked = Object.keys(env).filter((name) => name.startsWith("NEXT_PUBLIC_") && /KEY|SECRET|TOKEN|ACCESS_CODE|TRIPO/i.test(name));
   leaked.forEach((name) => warnings.push(`${name} is NEXT_PUBLIC_ and would ship to the browser. Rename it without the prefix.`));
-  const limit = Number(env.SIFT_DAILY_LIMIT || env.MESHY_DAILY_LIMIT || 20);
+  const limit = Number(env.SIFT_DAILY_LIMIT || 20);
   if (!Number.isInteger(limit) || limit < 1) warnings.push("Daily limit is not a positive integer; the default of 20 will be used.");
   const providers = PROVIDERS.map((p) => {
     const enabled = env[p.flag] === "true";

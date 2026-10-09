@@ -1,17 +1,8 @@
-import { hunyuanProProvider, hunyuanRapidProvider } from "./hunyuan";
-import { meshyProvider } from "./meshy";
-import { tencentProProvider, tencentRapidProvider } from "./tencent";
 import { tripoProvider } from "./tripo";
 import { HOSTED_PROVIDER_IDS, type HostedProvider, type HostedProviderId } from "./types";
 
-const PROVIDERS: Record<HostedProviderId, HostedProvider> = {
-  meshy: meshyProvider,
-  tripo: tripoProvider,
-  "hunyuan3d-rapid": hunyuanRapidProvider,
-  "hunyuan3d-pro": hunyuanProProvider,
-  "tencent-rapid": tencentRapidProvider,
-  "tencent-pro": tencentProProvider,
-};
+// The registry stays provider-neutral (ADR-017) even though Tripo is the only hosted provider (ADR-018).
+const PROVIDERS: Record<HostedProviderId, HostedProvider> = { tripo: tripoProvider };
 
 export const isHostedProviderId = (value: unknown): value is HostedProviderId => typeof value === "string" && (HOSTED_PROVIDER_IDS as readonly string[]).includes(value);
 export const getProvider = (id: HostedProviderId): HostedProvider => PROVIDERS[id];

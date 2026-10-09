@@ -304,3 +304,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visib
 .add-toolbar .toolbar-icon { width: 28px; height: 28px; padding: 0; font-size: 15px; border: 1px solid var(--line); background: transparent; }
 .add-toolbar .toolbar-icon:disabled { opacity: .4; cursor: default; }
 .add-toolbar .toolbar-icon:disabled:hover { background: transparent; color: inherit; }
+
+/* Provider picker: identical cards, equal spacing */
+.provider-picker { display: grid; grid-auto-rows: 1fr; gap: 8px; }
+.provider-option { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 10px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); background: rgba(255,255,255,.5); font-size: 12px; cursor: pointer; }
+.provider-option.is-selected { border-color: var(--accent); background: white; }
+.provider-option.is-disabled { cursor: not-allowed; opacity: .7; }
+.provider-option input { margin: 2px 0 0; }
+.provider-option__text { display: grid; gap: 3px; min-width: 0; }
+.provider-option__name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.provider-option__desc { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.chip { padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; font-size: 9px; font-style: normal; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.chip--unverified { border-color: #b8864b; color: #7a4f12; }
+
+/* Removal controls */
+.inspector__danger { gap: 6px; }
+.danger-button { justify-self: start; border-color: var(--accent); color: var(--accent); }
+.danger-button:hover { background: var(--accent); color: white; }
+.edge-remove { position: absolute; width: 24px; height: 24px; padding: 0; border: 1px solid var(--accent); border-radius: 50%; background: white; color: var(--accent); font-size: 16px; line-height: 1; cursor: pointer; pointer-events: all; }
+.edge-remove:hover, .edge-remove:focus-visible { background: var(--accent); color: white; }

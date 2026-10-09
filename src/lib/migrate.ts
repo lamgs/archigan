@@ -3,6 +3,7 @@ import {
   massingSpecSchema,
   siftProjectSchema,
   siftProjectV2Schema,
+  isSupportedProvider,
   type BuildingSpec,
   type DesignEdge,
   type DesignNode,
@@ -136,12 +137,25 @@ export function migrateV1ToV2(v1: SiftProject): { project: SiftProjectV2; warnin
   return { project, warnings };
 }
 
+/**
+ * ADR-018: projects saved with a provider the product no longer offers open as `procedural`. Only `settings.provider`
+ * is rewritten; jobs keep their raw provider value as history.
+ */
+export function coerceProjectProvider(project: SiftProjectV2): { project: SiftProjectV2; warnings: string[] } {
+  if (isSupportedProvider(project.settings.provider)) return { project, warnings: [] };
+  return { project: { ...project, settings: { ...project.settings, provider: "procedural" } }, warnings: [`The provider "${project.settings.provider}" is no longer supported; this project now uses Local procedural.`] };
+}
+
 /** Parses any persisted record (v1 or v2) into v2 without throwing. */
 export function migrateProject(raw: unknown): MigrationResult {
   const v2 = siftProjectV2Schema.safeParse(raw);
-  if (v2.success) return { ok: true, project: v2.data, warnings: [] };
+  if (v2.success) return { ok: true, ...coerceProjectProvider(v2.data) };
   const v1 = siftProjectSchema.safeParse(raw);
-  if (v1.success) return { ok: true, ...migrateV1ToV2(v1.data) };
+  if (v1.success) {
+    const migrated = migrateV1ToV2(v1.data);
+    const coerced = coerceProjectProvider(migrated.project);
+    return { ok: true, project: coerced.project, warnings: [...migrated.warnings, ...coerced.warnings] };
+  }
   const version = (raw as { schemaVersion?: unknown } | null)?.schemaVersion;
   return { ok: false, error: `Unrecognized project record (schemaVersion ${String(version)}): ${(version === 2 ? v2 : v1).error.issues[0]?.message ?? "invalid"}` };
 }

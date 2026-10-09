@@ -64,7 +64,9 @@ describe("migration v1 -> v2", () => {
     expect(job).toMatchObject({ providerTaskId: "t-1", status: "running", progress: 40 });
     expect(job.resultArtifactId).toBeUndefined();
     expect(Object.values(result.project.artifacts)[0].kind).toBe("building-spec");
-    expect(toLegacyProject(result.project)).toEqual(sample);
+    expect(job.provider).toBe("meshy"); // job keeps the raw provider as history
+    expect(result.project.settings.provider).toBe("procedural"); // ADR-018: removed provider coerced on load
+    expect(toLegacyProject(result.project)).toEqual({ ...sample, provider: "procedural" });
   });
 
   it("keeps the project but reports invalid legacy wiring", () => {
