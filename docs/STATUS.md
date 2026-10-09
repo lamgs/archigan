@@ -28,7 +28,7 @@ Verified from a **fresh clone of the remote branch**: `npm ci` → lint clean �
 - **E1 — Live Tripo is unverified.** (Originally Meshy; hosted generation is Tripo only since ADR-018.) No real-account call has ever been made; `verified` is hard-wired `false`. The PRD only requires mock/live to be labelled and reported separately, which they are.
 - **E2 — Real-GPU, Safari/Firefox and mobile-device testing was not done.** Everything ran in headless Chromium on software rendering. Touch interaction was not tested on a touch device (only responsive layouts).
 - **E3 — The deployed app behind Vercel Deployment Protection was not inspected;** deployment health is the GitHub commit status only.
-- **E4 — Minor deviations from the brief:** the “Add” toolbar is a horizontal pill at the top-left of the board rather than a vertical left toolbar; the optional server-side LLM interpreter was not built (ADR-014).
+- **E4 — Minor deviations from the brief:** ~~the “Add” toolbar was a horizontal pill~~ — **resolved 2026-10-09**: it is now a vertical left toolbar; the optional server-side LLM interpreter was not built (ADR-014).
 
 ## Deployment
 
@@ -77,7 +77,7 @@ Record anything that stops or limits work here (with the date and what would unb
 
 ## Verification
 
-Last full run (2026-10-09, after ADR-019 cleanup): `tsc --noEmit` clean; `eslint src/lib src/app scripts --max-warnings=0` clean; `vitest run` 22 files / 252 tests (src/lib + src/app + scripts: 20 files / 221 tests). The last full production build, 28 Playwright tests (scenario 9 is being reduced to Tripo only), `npm audit` (0 vulnerabilities) and a fresh-clone `npm ci` run were done at the P0 gate (above) and before ADR-018/019; re-run `npm run build` and `npm run test:e2e` before release. All hosted behavior is mocked; no live provider call.
+Last full run (2026-10-09, fresh clone of the pushed branch after the reference-style redesign): `npm ci` → eslint `--max-warnings=0` clean → `tsc --noEmit` clean → `vitest run` 22 files / 252 tests → production build → 33 Playwright tests → `npm audit` 0 vulnerabilities. All hosted behavior is mocked; Tripo remains unverified live.
 
 ## Next action (handoff to the next session)
 
@@ -86,6 +86,6 @@ Last full run (2026-10-09, after ADR-019 cleanup): `tsc --noEmit` clean; `eslint
 1. **E1 — live Tripo:** needs a throwaway low-credit `TRIPO_API_KEY` in a trusted environment (never commit it). Run the smoke test in `DEPLOYMENT.md`. Compare the real JSON against `normalizeTripoTask` in `src/lib/providers/tripo.ts` (`output.model_url`, envelope codes, `Expires` handling are unconfirmed) and adjust the adapter/tests; confirm or correct the ≈ $0.30 cost label. Only then consider changing the hard-wired `verified:false`.
 2. **E3 — deployed app:** with an authorized Vercel identity run `vercel inspect <dpl> --logs`, or smoke-test with `E2E_BASE_URL=https://<host> VERCEL_AUTOMATION_BYPASS_SECRET=<secret> npx playwright test e2e/acceptance.spec.ts -g "1\.|8\."`. Also clear the project-level Output Directory override (`public`) in Vercel settings (`vercel.json` currently masks it).
 3. **E2 — real devices/browsers:** manual pass on a real GPU, an iPhone/Android, Safari and Firefox (viewer, render PNGs at 1920×1080, touch orbit/pan, autosave, backup/import). Record findings; fix what breaks.
-4. **E4 — deviations:** restyle the “Add” toolbar as a compact vertical left toolbar; optionally build the server-side LLM interpreter (see ADR-014) — only if the owner wants them.
+4. **E4 — deviations:** (toolbar done) optionally build the server-side LLM interpreter (see ADR-014) — only if the owner wants them.
 
 Do not start P1.01 (Supabase sync) or P1.03 (GLB import) while any of the above is undecided. **Exception — owner-approved 2026-10-09: P1.02 hosted generation may proceed; scope reduced to Tripo only by ADR-018 (Meshy, Hunyuan3D, HY 3D removed).** It does not close E1–E4. **P1.02 is implemented (mocked only); next for it is a real-account Tripo smoke test (E1).** Latest verified counts are under Verification.
