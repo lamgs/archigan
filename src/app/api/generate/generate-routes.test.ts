@@ -25,6 +25,7 @@ describe("POST /api/generate", () => {
     vi.unstubAllEnvs();
     const res = await POST(post({ prompt: "A library", refinement: "", provider: "procedural" }));
     expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ kind: "local", provider: "procedural" }); // generation itself runs in the browser
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("rejects hosted requests when unconfigured, without the code, or without confirmation — and never calls Tripo", async () => {

@@ -119,3 +119,10 @@ The owner chose hosted AI generation with three providers: **Hunyuan3D (via fal.
 - **Rollback.** Rolling back to an ADR-017 build is safe for data (it still reads every value; projects coerced to `procedural` simply open as Local). Builds from before ADR-017 still cannot read `tripo`. Re-adding a provider means restoring its adapter from git history (the commit before this change) and adding it to `HOSTED_PROVIDER_IDS` and `SUPPORTED_PROVIDERS`.
 - **Unverified.** No provider, including Tripo, has been exercised with a real account.
 
+
+## ADR-019 — Bloat removal (dead legacy generator, stale docs)
+
+**Status:** accepted, 2026-10-09 (owner request: "review the codebase and remove bloat")
+
+- **Removed.** `src/lib/three-massing.ts` (legacy v1 mesh builder; no importers in src, e2e or scripts since the `BuildingSpec` switch). `SpecBudget` type in `limits.ts` (no users). The `deriveMassing` call in `POST /api/generate`: the `procedural` branch now answers `{kind:"local", provider}` because the UI never used the legacy `MassingSpec` response and generation runs in the browser; the route test that proves "procedural stays free: no key, no code, no network" is kept and now also asserts the response. `deriveMassing` moved out of `massing.ts` into `legacy-fixtures.ts` (its only consumer, which builds v1 migration fixtures); its two direct unit tests were dropped because the fixtures are exercised by the migration tests. Stale statements in `STATUS.md`, `DESIGN_REFERENCES.md`, `IMPLEMENTATION_PLAN.md` and the PRD that described Meshy, unimplemented inspector/branching/render behavior, or "no fake-indexeddb" were corrected.
+- **Kept deliberately.** v1 schema, `legacy-fixtures.ts`, `migrate.ts` (including `toLegacyProject`, the round-trip proof that migration is lossless), legacy provider ids, the `HostedProvider` interface/registry (ADR-018), `lineageOf` (tested domain function). No dependency was unused (every package is imported, or is a required peer/type/tooling package). The legacy Python/PyTorch files and `results/` are untouched pending an owner decision.

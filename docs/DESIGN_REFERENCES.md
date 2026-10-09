@@ -29,7 +29,7 @@ Sift narrows that pattern:
 ## Source snapshots
 
 - xFigura documentation, checked 2026-10-08: <https://xfigura.gitbook.io/xfigura-docs>
-- Meshy Text-to-3D API, checked 2026-10-08: <https://docs.meshy.ai/en/api/text-to-3d>
+- Tripo text-to-3D API (docs unreachable from the build environment; adapter written from secondary sources, see ADR-018 and `STATUS.md`).
 
 If locally captured screenshots are added later, place them under `docs/reference/`, record source and capture date, and use them only for design study.
 
