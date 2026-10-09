@@ -1,11 +1,17 @@
 import { z } from "zod";
 
 /**
- * `procedural` and `meshy` are the original values; later values were added backward-compatibly (ADR-017). Older builds
- * cannot read projects that use a newer value, so rolling back a deployment can make such projects fail to open.
+ * Every value ever persisted. LEGACY (removed from the product by ADR-018, kept parseable so old projects and job
+ * history still open): meshy, hunyuan3d-rapid, hunyuan3d-pro, tencent-rapid, tencent-pro. Use SUPPORTED_PROVIDERS for
+ * anything that is selectable or can spend money; `coerceProjectProvider` (migrate.ts) maps unsupported project
+ * settings to `procedural` on load.
  */
 export const providerSchema = z.enum(["procedural", "meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro", "tencent-rapid", "tencent-pro"]);
 export type Provider = z.infer<typeof providerSchema>;
+/** Providers the product still offers (ADR-018). */
+export const SUPPORTED_PROVIDERS = ["procedural", "tripo"] as const satisfies readonly Provider[];
+export type SupportedProvider = (typeof SUPPORTED_PROVIDERS)[number];
+export const isSupportedProvider = (id: unknown): id is SupportedProvider => typeof id === "string" && (SUPPORTED_PROVIDERS as readonly string[]).includes(id);
 
 export const massingSpecSchema = z.object({
   seed: z.number().int().nonnegative(),

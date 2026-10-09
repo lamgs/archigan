@@ -1,14 +1,16 @@
 import { NextResponse } from "next/server";
 import { generateRequestSchema } from "@/lib/contracts";
-import { deriveMassing } from "@/lib/massing";
 import { authorize, clientIp, guardResponse, providerErrorResponse, spendLimiter } from "@/lib/providers/hosted-http";
-import { getProvider } from "@/lib/providers/registry";
+import { getProvider, isHostedProviderId } from "@/lib/providers/registry";
 
 export async function POST(request: Request) {
   const parsed = generateRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid generation request.", issues: parsed.error.issues }, { status: 400 });
   const { prompt, refinement, provider, confirmSpend } = parsed.data;
-  if (provider === "procedural") return NextResponse.json({ kind: "massing", provider, massing: deriveMassing(prompt, refinement) });
+  if (provider === "procedural") return NextResponse.json({ kind: "local", provider }); // procedural generation runs in the browser: no key, code, or network here
+
+  // Legacy provider ids (meshy, hunyuan3d-*, tencent-*) still parse so old projects open, but can never spend money.
+  if (!isHostedProviderId(provider)) return NextResponse.json({ error: "This provider is no longer supported. Use Local procedural or Tripo.", code: "unsupported-provider" }, { status: 400 });
 
   // Paid path: configuration → access code → explicit confirmation → rate/daily limits → provider call.
   const adapter = getProvider(provider);

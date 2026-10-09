@@ -33,6 +33,8 @@ import { MAX_GLB_BYTES, ProviderError, type Fetch, type HostedProvider, type Job
 export const TRIPO_BASE_URL = "https://openapi.tripo3d.ai/v3";
 export const TRIPO_CREATE_PATH = "/generation/text-to-model";
 export const TRIPO_TASK_PATH = "/tasks";
+/** ADR-016: about $0.28-0.35 per text-to-3D at 100 credits = $1 via API pay-as-you-go. UNCONFIRMED estimate, not a quote. */
+export const TRIPO_COST_LABEL = "≈ $0.30 per model (estimate)";
 export const TRIPO_MODEL = "v3.1-20260211";
 const ASSET_HOSTS = ["tripo3d.com", "tripo3d.ai"] as const;
 const MAX_PROMPT_CHARS = 1024; // conservative; Tripo's real limit is unconfirmed
@@ -131,7 +133,7 @@ async function call(path: string, init: RequestInit, fetchImpl: Fetch, env: Reco
 export const tripoProvider: HostedProvider = {
   id: "tripo",
   label: "Tripo",
-  costLabel: "cost not confirmed — check your Tripo plan",
+  costLabel: TRIPO_COST_LABEL,
   supportsCancel: false,
   assetHosts: ASSET_HOSTS,
   maxGlbBytes: MAX_GLB_BYTES,

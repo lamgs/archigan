@@ -21,12 +21,12 @@ describe("config", () => {
     expect(tripoProvider.config({ ...base, TRIPO_API_KEY: "" })).toMatchObject({ configured: false, hasKey: false });
     expect(tripoProvider.config({ ...base, SIFT_ACCESS_CODE: undefined })).toMatchObject({ configured: false, accessCodeRequired: false });
   });
-  it("falls back to MESHY_ACCESS_CODE", () => {
-    expect(tripoProvider.config({ TRIPO_ENABLED: "true", TRIPO_API_KEY: "k", MESHY_ACCESS_CODE: "m" }).configured).toBe(true);
+  it("ignores the removed MESHY_ACCESS_CODE fallback", () => {
+    expect(tripoProvider.config({ TRIPO_ENABLED: "true", TRIPO_API_KEY: "k", MESHY_ACCESS_CODE: "m" }).configured).toBe(false);
   });
   it("reports static metadata", () => {
     expect(tripoProvider).toMatchObject({ id: "tripo", label: "Tripo", supportsCancel: false, assetHosts: ["tripo3d.com", "tripo3d.ai"] });
-    expect(tripoProvider.costLabel).toMatch(/not confirmed/);
+    expect(tripoProvider.costLabel).toBe("≈ $0.30 per model (estimate)");
   });
 });
 

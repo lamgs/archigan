@@ -129,7 +129,7 @@ test("4. two child revisions stay visible with lineage after reload", async ({ p
   // Branch A: follow-up prompt.
   await selectNode(page, "Variation", 0);
   await page.locator('article[aria-label="Variation node"] >> nth=0 >> textarea').fill("glass facade, crown roof");
-  await page.locator(".save-state").click();
+  await page.locator('article[aria-label="Variation node"] textarea').first().blur(); // commit the follow-up text
   await savedBadge(page);
 
   const snapshot = async () => {
@@ -284,10 +284,10 @@ test("7. reload restores the complete board, settings, assets and jobs", async (
 test("8. missing credentials leave procedural mode useful and never fake hosted success", async ({ page }) => {
   const errors = watchErrors(page);
   const providers = await (await page.request.get("/api/providers")).json();
-  expect(providers.meshy).toMatchObject({ configured: false, verified: false });
+  expect(providers.tripo).toMatchObject({ configured: false, verified: false });
   expect(providers.procedural).toMatchObject({ configured: true });
 
-  const attempt = await page.request.post("/api/generate", { headers: { "x-sift-access-code": "anything" }, data: { prompt: "A tower", refinement: "", provider: "meshy", confirmSpend: true } });
+  const attempt = await page.request.post("/api/generate", { headers: { "x-sift-access-code": "anything" }, data: { prompt: "A tower", refinement: "", provider: "tripo", confirmSpend: true } });
   expect(attempt.status()).toBe(503);
   const body = await attempt.json();
   expect(body).toMatchObject({ code: "not-configured" });
@@ -296,10 +296,11 @@ test("8. missing credentials leave procedural mode useful and never fake hosted 
 
   await openStudio(page);
   await selectNode(page, "Generation");
-  const meshy = page.locator('label.radio:has-text("Meshy")');
-  await expect(meshy).toContainText("unavailable");
-  await expect(meshy.locator("input")).toBeDisabled();
-  await expect(page.locator('label.radio:has-text("Local procedural") input')).toBeChecked();
+  const tripo = page.locator('label.provider-option[data-provider="tripo"]');
+  await expect(tripo).toContainText("Not configured on this server");
+  await expect(tripo).toContainText("Unverified");
+  await expect(tripo.locator("input")).toBeDisabled();
+  await expect(page.locator('label.provider-option[data-provider="procedural"] input')).toBeChecked();
   await page.locator(".node-run").click(); // procedural generation still works
   await expect(page.locator(".preview-panel__caption")).toBeVisible();
   await savedBadge(page);
@@ -315,14 +316,14 @@ for (const providerId of Object.keys(FAKE_PROVIDERS) as FakeProviderId[]) test(`
   const fake = await fakeHostedApi(context, providerId);
   await openStudio(page);
   await selectNode(page, "Generation");
-  const option = page.locator(`label.radio[data-provider="${providerId}"]`);
-  await expect(option).toContainText("unverified");
-  await expect(option).toContainText(`${costLabel} (estimate, not a quote)`);
+  const option = page.locator(`label.provider-option[data-provider="${providerId}"]`);
+  await expect(option.locator(".chip--unverified")).toHaveText("Unverified");
+  await expect(option.locator(".provider-option__desc")).toHaveText(costLabel);
   await option.click();
   await page.locator(".node-run").click();
   const dialog = page.locator('[role="alertdialog"]');
   await expect(dialog).toContainText(`Spend ${label} credits?`);
-  await expect(dialog).toContainText(`${costLabel} (an estimate`);
+  await expect(dialog).toContainText(`Approximate cost per generation: ${costLabel}`);
   await expect(dialog).toContainText(supportsCancel ? "only be cancelled while it is still queued" : "cannot be cancelled once started");
   expect(fake.posts).toHaveLength(0); // nothing sent before explicit confirmation
   await expect(page.locator("button.modal__go")).toBeDisabled();
@@ -362,12 +363,11 @@ for (const providerId of Object.keys(FAKE_PROVIDERS) as FakeProviderId[]) test(`
   await dialog.locator('input[type="password"]').fill("letmein");
   await page.locator("button.modal__go").click();
   await expect(hostedHint).toContainText(/Generating/, { timeout: 20_000 });
-  // Switch the selected provider to a different one: the running job must keep using its own provider for every request.
-  const otherId = providerId === "tripo" ? "meshy" : "tripo";
-  await page.locator(`label.radio[data-provider="${otherId}"]`).click();
-  await expect(page.locator(".inspector")).toContainText(`Hosted job · ${FAKE_PROVIDERS[otherId].label}`);
+  // Switch the selected provider to Local mid-job: the running job must keep its own provider for every request.
+  await page.locator('label.provider-option[data-provider="procedural"]').click();
+  await expect(page.locator(".inspector")).toContainText(`Hosted job · ${label}`);
   await savedBadge(page);
-  expect((await storedProjects(page))[0].settings.provider).toBe(otherId); // the reload below resumes with a different provider selected
+  expect((await storedProjects(page))[0].settings.provider).toBe("procedural"); // the reload below resumes with Local selected
   const stored = (await storedProjects(page))[0];
   expect(Object.values<any>(stored.jobs).some((j) => j.provider === providerId && j.providerTaskId === "task-fake-0001" && j.status !== "completed")).toBe(true); // task id persisted before completion
 
@@ -377,7 +377,9 @@ for (const providerId of Object.keys(FAKE_PROVIDERS) as FakeProviderId[]) test(`
   await expect(page.locator(".inspector")).toContainText("Enter the access code to resume");
   fake.polls = 3;
   await page.locator('.inspector fieldset:has(legend:has-text("Hosted job")) input[type="password"]').fill("letmein");
-  await expect(hostedHint).toHaveText("Hosted model saved in this browser", { timeout: 40_000 });
+  await expect.poll(async () => Object.values<any>((await storedProjects(page))[0].jobs).some((j) => j.provider === providerId && j.status === "completed"), { timeout: 40_000 }).toBe(true); // finishes even though Local is selected
+  await page.locator(`label.provider-option[data-provider="${providerId}"]`).click(); // the hosted model is shown while its provider is selected
+  await expect(hostedHint).toHaveText("Hosted model saved in this browser");
   await expect(page.locator(".preview-panel__caption")).toContainText(`${label} GLB`);
   await expect(page.locator(".preview-panel__caption")).toContainText("unverified");
   await expect(page.locator('[aria-label="Display mode"] button:disabled')).toHaveCount(3);

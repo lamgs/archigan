@@ -103,20 +103,15 @@ export function boxGlb(): Buffer {
   return Buffer.concat([head, c1, j, c2, b]);
 }
 
-export type FakeProviderId = "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" | "tencent-rapid" | "tencent-pro";
+export type FakeProviderId = "tripo";
 export const FAKE_PROVIDERS: Record<FakeProviderId, { label: string; costLabel: string; supportsCancel: boolean }> = {
-  "hunyuan3d-rapid": { label: "Hunyuan3D Rapid", costLabel: "about $0.30 per model", supportsCancel: true },
-  "hunyuan3d-pro": { label: "Hunyuan3D Pro", costLabel: "about $0.50 per model", supportsCancel: true },
-  "tencent-rapid": { label: "HY 3D Rapid (Tencent)", costLabel: "about $0.20 per model", supportsCancel: false },
-  "tencent-pro": { label: "HY 3D Pro (Tencent)", costLabel: "about $0.35 per model", supportsCancel: false },
-  tripo: { label: "Tripo", costLabel: "about $0.40 per model", supportsCancel: false },
-  meshy: { label: "Meshy", costLabel: "about 20 credits", supportsCancel: true },
+  tripo: { label: "Tripo", costLabel: "≈ $0.30 per model (estimate)", supportsCancel: false },
 };
 
 export type HostedFake = { posts: any[]; codes: (string | undefined)[]; deletes: number; polls: number; mode: "ok" | "no-credits" | "hold"; pollProviders: (string | null)[]; deleteProviders: (string | null)[]; modelProviders: (string | null)[] };
 
 /** Fakes the app's own hosted API at the browser boundary (documented-contract mock; never a live vendor call). Every provider is configured. */
-export async function fakeHostedApi(context: BrowserContext, provider: FakeProviderId = "meshy"): Promise<HostedFake> {
+export async function fakeHostedApi(context: BrowserContext, provider: FakeProviderId = "tripo"): Promise<HostedFake> {
   const fake: HostedFake = { posts: [], codes: [], deletes: 0, polls: 0, mode: "ok", pollProviders: [], deleteProviders: [], modelProviders: [] };
   const catalog = Object.fromEntries(Object.entries(FAKE_PROVIDERS).map(([id, meta]) => [id, { ...meta, configured: true, enabled: true, hasKey: true, accessCodeRequired: true, verified: false }]));
   await context.route("**/api/providers", (route) => route.fulfill({ json: { procedural: { configured: true, verified: true }, ...catalog } }));

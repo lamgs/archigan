@@ -2,6 +2,15 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-09 — Claude — Tripo-only, node/connector removal, UI redesign, bloat pass
+
+- **Providers (ADR-018):** Meshy, Hunyuan3D (fal) and Tencent adapters, env vars and docs removed; Tripo is the only hosted provider (`TRIPO_ENABLED`, `TRIPO_API_KEY`, `SIFT_ACCESS_CODE`, `SIFT_DAILY_LIMIT`). Projects saved with a removed provider still open: `settings.provider` is coerced to Local on load, jobs keep their raw provider and fail with a readable message. The provider-neutral interface/registry stays (small).
+- **UI:** two identical provider cards (Local "Free", Tripo "≈ $0.30 per model (estimate)" + Unverified chip); visible Delete node button, Delete/Backspace, connector × control; reference-style layout (dotted canvas, floating pills, vertical left Add toolbar — closes the E4 toolbar deviation — docked sidebar with viewer card on top and an Inspector that expands when a node is selected; mobile bottom panel). Token-based CSS. Deleting a node with jobs previously broke saving; jobs of deleted nodes are now left out of the stored project but kept in memory for undo (an in-flight hosted job on a deleted node is lost on reload — a contracts change would be the cleaner fix).
+- **Bloat (ADR-019):** removed `three-massing.ts`, moved `deriveMassing` to legacy fixtures, `/api/generate` procedural response is now `{kind:"local"}`, stale docs rewritten. Owner decision pending: legacy PyTorch files and `results/` at the repo root (AGENTS.md forbids silent deletion).
+- **Checks (fresh clone):** lint, tsc, 252 unit tests, build, 33 Playwright tests, audit clean.
+- **Not verified:** Tripo against a real account (docs unreachable; v3 contract from secondary sources); 1024/768 layouts only via axe/e2e, not visually; real devices (E2).
+- **Next:** first real Tripo task (see DEPLOYMENT.md); owner decision on legacy Python files; optional LLM interpreter.
+
 ## 2026-10-08 — Claude — Tencent direct adapter + Tripo v3 (UNVERIFIED)
 
 - Added `tencent-rapid` / `tencent-pro` (`src/lib/providers/tencent.ts`): TC3-HMAC-SHA256 signing via `node:crypto` (pure `signTc3`, tested against an independent derivation — no official vector exists), actions `SubmitHunyuanTo3D{Rapid,Pro}Job` / `Query…`, GLB selection from `ResultFile3Ds`, 24 h expiry, no cancel. Env: `TENCENT_HY3D_ENABLED`, `TENCENT_SECRET_ID`, `TENCENT_SECRET_KEY`. Wired through enum, registry, picker metadata, preflight, `.env.example`, e2e scenario 9 (now 6 providers).

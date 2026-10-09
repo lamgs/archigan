@@ -264,7 +264,6 @@ export function ModelPreview({ spec: specProp, hosted, provider, stale = false, 
           <span className="section-kicker">Live study</span>
           <h2>Form preview</h2>
         </div>
-        <span className="provider-chip"><i /> {provider === "procedural" ? "Local fallback" : `${providerLabel(provider)} preview`}</span>
         <button ref={focusButton} type="button" className="viewer-focus" onClick={() => (focus ? closeFocus() : setFocus(true))} aria-pressed={focus}>{focus ? "Close focus (Esc)" : "Focus"}</button>
       </header>
 
@@ -307,6 +306,7 @@ export function ModelPreview({ spec: specProp, hosted, provider, stale = false, 
         <div className="preview-panel__caption">
           {showHosted ? <><span>{hosted?.label}</span><span>not editable</span><span>unverified</span></> : <><span>{summary.levels} levels</span><span>{summary.volumes} {summary.volumes === 1 ? "volume" : "volumes"}</span><span>{summary.footprint}</span></>}
         </div>
+        <span className="provider-chip"><i /> {provider === "procedural" ? "Local fallback" : `${providerLabel(provider)} preview`}</span>
         <p className="viewer-hint" aria-hidden="true">Drag orbit · right-drag pan · wheel zoom · arrows/+/−/F by keyboard</p>
       </div>
 

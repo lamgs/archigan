@@ -1,4 +1,3 @@
-import type { BuildingSpec } from "./contracts";
 import type { Layout } from "./geometry";
 
 /** Hard budgets that keep a single building responsive on modest GPUs. */
@@ -44,4 +43,3 @@ export function countObjectTriangles(root: { traverse: (visit: (child: unknown) 
   return total;
 }
 
-export type SpecBudget = (spec: BuildingSpec) => Complexity;

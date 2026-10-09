@@ -32,38 +32,35 @@ GitHub commit statuses (context `Vercel`) show every deployment since `f43fc44` 
 
 Mitigation: `vercel.json` pins `framework: nextjs`, `npm ci`, `npm run build`, and sets `outputDirectory` to `.next`. If the next deployment still fails, run `npx vercel inspect <dpl_id> --logs` (id is in the failing commit status `target_url`) and append the error here. Also check Project Settings → General: Framework Preset = Next.js, Root Directory empty, Node.js version 20.x–24.x.
 
-## Hosted generation (Hunyuan3D, Tripo, Meshy) — configuration and manual live smoke test
+## Hosted generation (Tripo) — configuration and manual live smoke test
 
-Each hosted provider is **disabled unless its own flag and key AND the shared access code are set** (fail closed). Setting one provider never enables another.
+Hosted generation uses one provider, Tripo (ADR-018; Meshy, Hunyuan3D and HY 3D were removed). It is **disabled unless the Tripo flag and key AND the shared access code are set** (fail closed).
 
 ```text
-SIFT_ACCESS_CODE=<shared secret users type before any paid request; anyone with it can spend credits on every enabled provider>
-SIFT_DAILY_LIMIT=20        # optional, per server instance, counted across ALL providers
-MESHY_ENABLED=true         MESHY_API_KEY=<server-only secret>
+SIFT_ACCESS_CODE=<shared secret users type before any paid request; anyone with it can spend your Tripo credits>
+SIFT_DAILY_LIMIT=20        # optional, per server instance
 TRIPO_ENABLED=true         TRIPO_API_KEY=<server-only secret>
-HUNYUAN_ENABLED=true       FAL_KEY=<server-only secret>     # enables Hunyuan3D Rapid and Pro (fal.ai)
-TENCENT_HY3D_ENABLED=true  TENCENT_SECRET_ID=<id> TENCENT_SECRET_KEY=<server-only secret>   # HY 3D Rapid and Pro direct from Tencent Cloud
 ```
 
-`MESHY_ACCESS_CODE` / `MESHY_DAILY_LIMIT` remain accepted as fallbacks. Routes: `POST /api/generate` (body `provider`, `confirmSpend: true`; header `x-sift-access-code`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (status / cancel), `GET /api/generate/{taskId}/model?provider=<id>` (GLB ingest; only HTTPS hosts on the provider's allowlist are fetched, redirects refused, 100 MB cap, `glTF` magic check), `GET /api/providers` (secret-free catalog). Provider ids: `meshy`, `tripo`, `hunyuan3d-rapid`, `hunyuan3d-pro`, `tencent-rapid`, `tencent-pro`.
+The old `MESHY_*`, `HUNYUAN_ENABLED`, `FAL_KEY` and `TENCENT_*` variables are no longer read; delete them from Vercel. Routes: `POST /api/generate` (body `provider`, `confirmSpend: true`; header `x-sift-access-code`; a removed provider id answers 400 `unsupported-provider`), `GET|DELETE /api/generate/{taskId}?provider=tripo` (status; cancel answers 501 because Tripo documents none; unknown provider 400 `unknown-provider`), `GET /api/generate/{taskId}/model?provider=tripo` (GLB ingest; only HTTPS hosts on the allowlist are fetched, redirects refused, 100 MB cap, `glTF` magic check), `GET /api/providers` (secret-free catalog: `procedural` and `tripo`).
 
 ### Setting up (no vendor calls)
 
-1. Create a **throwaway, low-credit** key at each vendor you want (fal.ai → `FAL_KEY`, Tripo → `TRIPO_API_KEY`, Meshy → `MESHY_API_KEY`) and set a spend cap/alert in that vendor's dashboard. Never paste keys into chat, issues, or the repo.
+1. Create a **throwaway, low-credit** key at Tripo (`TRIPO_API_KEY`) and set a spend cap/alert in the Tripo dashboard. Never paste keys into chat, issues, or the repo.
 2. Generate a long random access code (e.g. `openssl rand -base64 24`) for `SIFT_ACCESS_CODE`.
-3. Set variables in Vercel → Project → Settings → Environment Variables (Production and/or Preview; mark Sensitive) or, locally, in `.env.local`. Enable one provider at a time: `HUNYUAN_ENABLED=true` / `TRIPO_ENABLED=true` / `MESHY_ENABLED=true`. Redeploy after changing Vercel variables.
-4. Run the offline preflight (reads env only; no network to any vendor; never prints secret values): `npm run check:hosted` (add `-- --url https://<deployment>` to also read your own app's `/api/providers`). Providers you enabled should read READY; the rest NOT READY.
-5. In the app, the picker should now show those providers as configured, still labelled **unverified**. Selecting one and confirming the dialog is what first spends money — that is the smoke test below, not setup.
+3. Set variables in Vercel → Project → Settings → Environment Variables (Production and/or Preview; mark Sensitive) or, locally, in `.env.local`: `TRIPO_ENABLED=true`, `TRIPO_API_KEY`, `SIFT_ACCESS_CODE`. Redeploy after changing Vercel variables.
+4. Run the offline preflight (reads env only; no network to any vendor; never prints secret values): `npm run check:hosted` (add `-- --url https://<deployment>` to also read your own app's `/api/providers`). Tripo should read READY.
+5. In the app, the picker should now show Tripo as configured, still labelled **unverified**. Selecting it and confirming the dialog is what first spends money — that is the smoke test below, not setup.
 
-**Status: ALL UNVERIFIED.** Only mocked documented-contract tests exist; vendor docs for fal.ai and Tripo (and Meshy) were unreachable when the adapters were written. For each provider, use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
+**Status: UNVERIFIED.** Only mocked documented-contract tests exist; Tripo's docs were unreachable when the adapter was written. Use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
 
-1. Create task: `POST /api/generate` returns 202 with a task id; the vendor dashboard shows the task.
-2. Status: `GET /api/generate/{id}?provider=…` transitions queued → running → completed; compare the raw vendor JSON with the adapter's normalizer. **Unconfirmed names:** Tencent (service `ai3d` 2025-05-13 on `ai3d.intl.tencentcloudapi.com`, region `ap-guangzhou`, actions `SubmitHunyuanTo3D{Rapid,Pro}Job` / `QueryHunyuanTo3D{Rapid,Pro}Job`, TC3-HMAC-SHA256 signing, `Response.Error.Code` families, `JobId` format vs the app's task-id pattern, result hosts `myqcloud.com`/`tencentcos.cn|com`, whether Rapid accepts English prompts — the SDK says Pro prompts are meant to be Chinese); Tripo now targets **v3** (`openapi.tripo3d.ai/v3`, `POST /generation/text-to-model` with `model`, `GET /tasks/{id}`, `output.model_url`; results expire ≈5 min after success; no cancel); Meshy `model_urls.glb`, `task_error.message`, `expires_at`; Tripo base URL/path (v2 `/task` vs v3 per-capability endpoints), body fields, `output.pbr_model|model|model_url`, envelope error codes; fal endpoint ids, the app-id form of status/result/cancel URLs, `model_glb` / `model_urls.glb`, Rapid `enable_pbr`/`enable_geometry`, Pro `face_count`, prompt limits, the 403 balance wording, and the signed-asset hosts (`fal.media`, `tripo3d.com|ai`).
-3. Ingest: `/model` returns a GLB that opens in the viewer and downloads (fal Rapid may return OBJ — the app rejects non-GLB).
-4. Cancel: Meshy DELETE on a queued task succeeds (409 when running); fal cancel via `PUT …/cancel`; Tripo and Tencent have no known cancel (the app only stops waiting).
+1. Create task: `POST /api/generate` returns 202 with a task id; the Tripo dashboard shows the task.
+2. Status: `GET /api/generate/{id}?provider=tripo` transitions queued → running → completed; compare the raw vendor JSON with the adapter's normalizer. **Unconfirmed names:** Tripo v3 base URL/path (`openapi.tripo3d.ai/v3`, `POST /generation/text-to-model` with `model`, `GET /tasks/{id}` vs v2 `/task`), body fields, `output.model_url` (v2 `pbr_model|model` tolerated), envelope error codes (2010 credits, 2000 rate limit), asset hosts (`tripo3d.com|ai`); results expire ≈5 min after success; no cancel.
+3. Ingest: `/model` returns a GLB that opens in the viewer and downloads (the app rejects non-GLB).
+4. Cancel: Tripo has no known cancel (the app only stops waiting; DELETE answers 501).
 5. Failure paths: bad key → `auth`; empty credits → `insufficient-credits`; rapid requests → 429 handling.
 6. Reload mid-task: the job resumes after re-entering the access code.
-7. Record the real per-generation price; correct the approximate cost labels in `src/lib/providers/*.ts` and `src/lib/provider-meta.ts` (Tripo's is currently "not confirmed").
+7. Record the real per-generation price; correct the cost label in `src/lib/providers/tripo.ts` (`TRIPO_COST_LABEL`) and `src/lib/provider-meta.ts` (currently "≈ $0.30 per model (estimate)", unconfirmed, from ADR-016's ≈ $0.28–0.35 at 100 credits = $1).
 
 ## Release, rollback, and cost runbook
 
@@ -74,7 +71,7 @@ TENCENT_HY3D_ENABLED=true  TENCENT_SECRET_ID=<id> TENCENT_SECRET_KEY=<server-onl
 
 **Rollback.** Vercel → Project → Deployments → pick the last good deployment → *Promote to Production* (or `vercel rollback`), or revert the commit on `main`. User data is not at risk: projects live in each visitor's browser, not on the server. Compatibility rule that makes rollback safe: stored data is only ever *read forward* — never remove read support for schema v1/v2; a future v3 must migrate on read and must not rewrite records in a way an older build cannot open.
 
-**Provider cost control (all hosted providers).** A paid request needs the server-side `SIFT_ACCESS_CODE`, the provider's own flag and key, an explicit user confirmation naming the selected provider, and passes per-IP (3 per 10 min) and daily (`SIFT_DAILY_LIMIT`, default 20) limits that are shared across providers. The limiter is per server instance, so worst-case daily spend is *limit × warm instances × the most expensive provider's price* — also set a spend cap/alerts in each vendor account (Meshy, Tripo, fal.ai). Approximate costs shown in the UI are estimates from public pages (Hunyuan3D Rapid ≈ $0.225, Pro ≈ $0.375, Meshy ≈ 20 credits; Tripo unconfirmed) and must be re-checked. To stop **one** provider immediately: set its flag to `false` (or delete its key) and redeploy; calls then fail closed with 503. To stop **all** hosted spending: unset `SIFT_ACCESS_CODE` (and `MESHY_ACCESS_CODE`). To revoke a leaked access code: change it and redeploy. If a key may have leaked: rotate it at the vendor first, then update the env var. Review each vendor's usage dashboard after any public sharing of the code. **Rollback caveat:** projects saved with `tripo` or `hunyuan3d-*` cannot be opened by builds from before ADR-017 (see `DECISIONS.md`).
+**Provider cost control (Tripo).** A paid request needs the server-side `SIFT_ACCESS_CODE`, Tripo's flag and key, an explicit user confirmation naming Tripo, and passes per-IP (3 per 10 min) and daily (`SIFT_DAILY_LIMIT`, default 20) limits. The limiter is per server instance, so worst-case daily spend is *limit × warm instances × the per-model price* — also set a spend cap/alert in the Tripo account. The cost shown in the UI (≈ $0.30 per model) is an unconfirmed estimate from public pages and must be re-checked. To stop hosted spending immediately: set `TRIPO_ENABLED=false` (or delete the key, or unset `SIFT_ACCESS_CODE`) and redeploy; calls then fail closed with 503. To revoke a leaked access code: change it and redeploy. If the key may have leaked: rotate it at Tripo first, then update the env var. Review Tripo's usage dashboard after any public sharing of the code. **Rollback caveat (ADR-018):** builds from before ADR-017 cannot open projects saved with `tripo`; builds from ADR-017 through before ADR-018 open everything, since legacy provider values stay readable.
 
 **Performance budget.** Building meshes are capped at 60 000 triangles / 1 200 draw calls (`src/lib/limits.ts`); hosted GLB previews at 1.5 M triangles; the viewer renders on demand (0 idle frames) with device-pixel-ratio capped at 1.75; offscreen renders are sequential and release their GPU context; autosave is debounced (900 ms). Regressions in these show up as e2e failures (idle-frame and GPU-resource checks are in `docs/STATUS.md` evidence).
 
@@ -83,11 +80,11 @@ TENCENT_HY3D_ENABLED=true  TENCENT_SECRET_ID=<id> TENCENT_SECRET_KEY=<server-onl
 The procedural application requires no secrets. Optional hosted generation requires server-side variables:
 
 ```text
-SIFT_ACCESS_CODE, plus per provider: MESHY_ENABLED + MESHY_API_KEY, TRIPO_ENABLED + TRIPO_API_KEY, HUNYUAN_ENABLED + FAL_KEY
+SIFT_ACCESS_CODE, TRIPO_ENABLED, TRIPO_API_KEY
 (configured in Vercel, never committed)
 ```
 
-Until a real-account test succeeds for a provider, the application and status docs must continue to label it as unverified.
+Until a real-account test succeeds for Tripo, the application and status docs must continue to label it as unverified.
 
 ## Authorized verification checklist
 
@@ -103,7 +100,7 @@ Then verify:
 
 1. Deployment is `READY` and linked to the intended `main` commit.
 2. Home page renders the canvas and procedural model after protection is satisfied.
-3. `/api/providers` returns procedural configured/verified and an honest, unverified state for each hosted provider.
+3. `/api/providers` returns procedural configured/verified and an honest, unverified state for Tripo.
 4. Prompt generation, IndexedDB save/reload, PNG, and GLB work on the deployed origin.
 5. Runtime error logs are clean for the smoke-test window.
 6. `STATUS.md` is updated with target, commit, URL, and observed result.

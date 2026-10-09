@@ -61,7 +61,7 @@ The output must contain real geometry. Static images, fake progress, unrelated h
 
 ### Hosted generation
 
-- Optional server-side Meshy adapter; credentials never enter the client bundle or local project data.
+- Optional server-side hosted adapter (Tripo, ADR-018); credentials never enter the client bundle or local project data.
 - Explicit paid-generation confirmation naming the provider before a request.
 - Validated and protected create request; asynchronous job ID; queued/running/completed/failed/timed-out/rate-limited/cancelled states; polling or supported streaming; reload-safe job state.
 - Download completed GLB assets into persistent storage rather than relying indefinitely on expiring signed URLs.

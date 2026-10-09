@@ -92,7 +92,7 @@ Outcome: configured users can generate hosted GLB assets safely without vendor c
 
 Delivered baseline:
 
-- Server-only Meshy v2 preview request adapter and provider-status endpoint.
+- Server-only hosted-provider request adapter (originally Meshy; Tripo only since ADR-018) and provider-status endpoint.
 - Environment gating, request validation, server-only secret handling, and honest unverified status.
 
 Remaining gate work:

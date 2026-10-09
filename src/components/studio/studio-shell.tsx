@@ -1,15 +1,15 @@
 "use client";
 
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, type Connection, type Edge, type Viewport } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, useStore, type Connection, type Edge, type Viewport } from "@xyflow/react";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { DesignEdge, DesignNode, DesignNodeType, GenerationJob as GenerationJobT, Provider, SiftProjectV2, ViewerSettings } from "@/lib/contracts";
 import { DEFAULT_VIEWER_SETTINGS } from "@/lib/viewer";
 import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, projectSignature, renameProject, validateProjectName } from "@/lib/projects";
-import { SAMPLE_BLURBS, sampleProjects } from "@/lib/samples";
-import { applyTaskUpdate, buildHostedArtifact, completeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
-import { isHostedProvider, providerCost, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
+import { sampleProjects } from "@/lib/samples";
+import { applyTaskUpdate, buildHostedArtifact, completeJob, failIfRetiredProvider, failJob, isActiveJob, isUnknownProviderError, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
+import { isHostedProvider, isSupportedProvider, providerCost, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
 import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTask } from "@/lib/hosted-client";
 import { probeGpu, renderPng } from "@/lib/render-image";
 import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
@@ -20,20 +20,36 @@ import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, 
 import { Dashboard } from "./dashboard";
 import { Inspector } from "./inspector";
 import { PaidConfirm } from "./paid-confirm";
-import { StudioNode, type StudioFlowNode } from "./studio-node";
+import { removeEdge, removeNode } from "./graph-edit";
+import { RemovableEdge } from "./removable-edge";
+import { NodeGlyph, StudioNode, type StudioFlowNode } from "./studio-node";
 
 const nodeTypes = { studio: StudioNode };
+const edgeTypes = { removable: RemovableEdge };
 const ModelPreview = dynamic(() => import("./model-preview").then((module) => module.ModelPreview), {
   ssr: false,
   loading: () => <aside className="preview-panel preview-panel--loading">Preparing 3D study…</aside>,
 });
+
+/** Fit options that keep nodes clear of the floating chrome (top pill, left toolbar, bottom pills). */
+const FIT_DESKTOP = { padding: { top: "88px", right: "32px", bottom: "72px", left: "84px" }, maxZoom: 1 } as const;
+const FIT_NARROW = { padding: { top: "160px", right: "16px", bottom: "72px", left: "16px" }, maxZoom: 1 } as const;
+const NARROW_QUERY = "(max-width: 900px)";
+const subscribeNarrow = (notify: () => void) => { const query = window.matchMedia(NARROW_QUERY); query.addEventListener("change", notify); return () => query.removeEventListener("change", notify); };
+/** True on tablet/phone widths, where the inspector docks under the board instead of beside it. */
+const useNarrow = () => useSyncExternalStore(subscribeNarrow, () => window.matchMedia(NARROW_QUERY).matches, () => false);
+
+function ZoomReadout() {
+  const zoom = useStore((state) => state.transform[2]);
+  return <span className="zoom-readout" aria-hidden="true">{Math.round(zoom * 100)}%</span>;
+}
 
 const PORT_COLORS: Record<string, string> = { prompt: "#8f2f24", "building-spec": "#2d2c29", "model-glb": "#4f7a5a", "render-png": "#3d6a8c" };
 
 function toFlowNodes(graph: FlowGraph): StudioFlowNode[] {
   return graph.nodes.map((node) => ({
     id: node.id, type: "studio", position: node.position,
-    data: { type: node.type, params: node.params, artifactId: node.artifactId, status: "blocked", message: "", summary: "", nextTypes: [], onText: () => {}, onAdd: () => {}, onRun: () => {}, onBranch: () => {}, onCommit: () => {} },
+    data: { type: node.type, params: node.params, artifactId: node.artifactId, status: "blocked", message: "", summary: "", nextTypes: [], busy: false, onText: () => {}, onAdd: () => {}, onRun: () => {}, onBranch: () => {}, onCommit: () => {} },
   }));
 }
 function toFlowEdges(graph: FlowGraph): Edge[] {
@@ -45,6 +61,8 @@ const metaOf = (project: SiftProjectV2): Meta => ({ id: project.id, name: projec
 
 function Studio() {
   const flow = useReactFlow();
+  const narrow = useNarrow();
+  const fitOptions = narrow ? FIT_NARROW : FIT_DESKTOP;
   const wrap = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<"dashboard" | "studio">("dashboard");
   const [saved, setSaved] = useState<SiftProjectV2[]>([]);
@@ -79,7 +97,10 @@ function Studio() {
     void listProjects().then(setSaved).catch(() => setNotice("Local storage is unavailable; this session still works.")).finally(() => setLoadingProjects(false));
     void probeStorage().then(setStorageOk);
     queueMicrotask(() => setGpu(probeGpu())); // browser-only capability probe
-    void fetch("/api/providers").then((response) => response.json()).then((data: ProviderCatalog) => setCatalog(data)).catch(() => setCatalog(null));
+    void fetch("/api/providers", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: ProviderCatalog) => setCatalog(data))
+      .catch(() => { setCatalog(null); setNotice("Could not read provider status from the server, so hosted providers appear unavailable. Reload to retry."); });
   }, []);
 
   const graph = useMemo<FlowGraph>(() => ({
@@ -117,7 +138,12 @@ function Studio() {
     setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, params: { ...node.data.params, text: value } } } : node)));
   }, [setNodes, record]);
 
-  const buildProject = (base: Meta, g: FlowGraph, viewport: Viewport = base.viewport): SiftProjectV2 => ({ schemaVersion: 2, ...base, viewport, updatedAt: new Date().toISOString(), graph: g });
+  // The stored project may not contain jobs whose node was deleted (contracts: "Job references a missing node"). They stay in memory so Undo restores the node with its jobs; artifacts and revisions are always kept.
+  const buildProject = (base: Meta, g: FlowGraph, viewport: Viewport = base.viewport): SiftProjectV2 => {
+    const present = new Set(g.nodes.map((node) => node.id));
+    const jobs = Object.fromEntries(Object.entries(base.jobs).filter(([, job]) => present.has(job.nodeId)));
+    return { schemaVersion: 2, ...base, jobs, viewport, updatedAt: new Date().toISOString(), graph: g };
+  };
 
   const persist = async (base: Meta = meta, g: FlowGraph = graph) => {
     const named = validateProjectName(base.name);
@@ -298,9 +324,17 @@ function Studio() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  // A task left over from a provider the product no longer offers cannot be polled: show it as failed instead of waiting forever.
+  const unsupportedActiveKey = Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job) && !isSupportedProvider(job.provider)).map((job) => job.id).join(",");
+  useEffect(() => {
+    if (!unsupportedActiveKey) return;
+    const now = new Date().toISOString();
+    unsupportedActiveKey.split(",").forEach((id) => patchJob(id, (job) => failIfRetiredProvider(job, now)));
+  }, [unsupportedActiveKey, patchJob]);
+
   const jobsRef = useRef(meta.jobs);
   useEffect(() => { jobsRef.current = meta.jobs; });
-  const activeJobKey = view === "studio" ? Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job)).map((job) => job.id).join(",") : "";
+  const activeJobKey = view === "studio" ? Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job) && isSupportedProvider(job.provider)).map((job) => job.id).join(",") : "";
   useEffect(() => {
     const code = accessCode.trim();
     if (!activeJobKey || !code) return;
@@ -321,6 +355,7 @@ function Studio() {
         if (!status.ok) {
           const { error } = status;
           if (error.code === "rate-limited") { patchJob(jobId, (current) => markRateLimited(current, now)); delay = nextPollDelayMs(attempt, error.retryAfterSeconds ?? 10); }
+          else if (isUnknownProviderError(error)) return patchJob(jobId, (current) => failIfRetiredProvider(current, now));
           else if (!error.retryable) return patchJob(jobId, (current) => failJob(current, { code: error.code, message: error.message, retryable: false }, now));
         } else if (status.value.status === "completed") {
           const model = await downloadHostedModel(job.provider, job.providerTaskId, code);
@@ -334,6 +369,7 @@ function Studio() {
             setNotice("Hosted model downloaded and saved in this browser.");
             return;
           }
+          if (isUnknownProviderError(model.error)) return patchJob(jobId, (current) => failIfRetiredProvider(current, now));
           if (model.error.retryable && (ingestTries += 1) < 4) delay = 4000 * ingestTries;
           else return patchJob(jobId, (current) => failJob(current, { code: model.error.code, message: model.error.message, retryable: false }, now));
         } else patchJob(jobId, (current) => applyTaskUpdate(current, status.value, now));
@@ -476,6 +512,26 @@ function Studio() {
     return () => window.removeEventListener("keydown", onKey);
   }, [view]);
 
+  // Escape collapses the inspector the same way clicking empty canvas does: by clearing the selection.
+  useEffect(() => {
+    if (view !== "studio") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.tagName === "SELECT" || document.querySelector(".modal-backdrop, .preview-panel--focus")) return;
+      setNodes((current) => (current.some((node) => node.selected) ? current.map((node) => (node.selected ? { ...node, selected: false } : node)) : current));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, setNodes]);
+
+  // On narrow screens the inspector docks under the board and shrinks it, so bring the selected node back into view.
+  useEffect(() => {
+    if (view !== "studio" || !selectedId || !narrow) return;
+    const timer = window.setTimeout(() => void flow.fitView({ nodes: [{ id: selectedId }], ...FIT_NARROW, maxZoom: 0.8, duration: 250 }), 300);
+    return () => window.clearTimeout(timer);
+  }, [view, selectedId, narrow, flow]);
+
   const branch = (sourceId: string) => {
     const result = branchFrom(graph, sourceId, { variation: uid("variation"), model: uid("model"), edgeA: uid("edge"), edgeB: uid("edge") });
     if (!result.ok) return setNotice(result.message);
@@ -518,6 +574,24 @@ function Studio() {
     record();
     setEdges(toFlowEdges(result.graph));
   };
+  /** Focus returns to the board after a removal, so keyboard users are not left on a button that no longer exists. */
+  const focusBoard = () => window.setTimeout(() => wrap.current?.focus(), 0);
+  const deleteNode = (id: string) => {
+    const result = removeNode(graph, id);
+    if (!result.ok) return setNotice(result.message);
+    record();
+    applyGraph(result.graph);
+    setNotice(`${NODE_LABELS[graph.nodes.find((node) => node.id === id)?.type ?? "prompt"]} node deleted with its connections. Undo brings it back.`);
+    focusBoard();
+  };
+  const deleteEdge = (id: string) => {
+    const result = removeEdge(graph, id);
+    if (!result.ok) return setNotice(result.message);
+    record();
+    applyGraph(result.graph);
+    setNotice("Connection removed. Undo brings it back.");
+    focusBoard();
+  };
   const isValid = (connection: Connection | Edge) => validateConnection(graph.nodes, graph.edges, { source: connection.source, sourcePort: connection.sourceHandle ?? "", target: connection.target, targetPort: connection.targetHandle ?? "" }).ok;
 
   const displayNodes = useMemo(() => nodes.map((node): StudioFlowNode => {
@@ -526,14 +600,16 @@ function Studio() {
     const summary = result && result.status !== "blocked" && result.output.kind === "spec" ? `${Math.max(...result.output.spec.volumes.map((v) => v.startFloor + v.floorCount))} levels · ${result.output.spec.volumes.length} ${result.output.spec.volumes.length === 1 ? "volume" : "volumes"}` : "";
     const message = result && "message" in result && result.message ? result.message : "";
     const renderSummary = node.data.type === "render" && result?.status === "ready" ? `Rendered ${describeRender(parseRenderSettings(node.data.params))}` : summary;
-    return { ...node, data: { ...node.data, status, message, summary: renderSummary, nextTypes: nextNodeTypes(node.data.type), onText: setParam, onAdd: add, onRun: run, onBranch: branch, onCommit: () => { if (!blank) void persist(); } } };
+    const busy = (node.data.type === "generation" && Object.values(meta.jobs).some((job) => job.nodeId === node.id && isHostedJob(job) && isActiveJob(job))) || (node.data.type === "render" && rendering && node.id === selectedId);
+    return { ...node, data: { ...node.data, status, message, busy, summary: renderSummary, nextTypes: nextNodeTypes(node.data.type), onText: setParam, onAdd: add, onRun: run, onBranch: branch, onCommit: () => { if (!blank) void persist(); } } };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [nodes, results, graph, meta]);
 
   const flowEdges = useMemo(() => edges.map((edge) => {
     const type = graph.nodes.find((node) => node.id === edge.source)?.type;
     const kind = type ? NODE_PORTS[type].outputs.find((port) => port.id === edge.sourceHandle)?.kind : undefined;
-    return { ...edge, animated: results[edge.source]?.status === "ready", style: { stroke: (kind && PORT_COLORS[kind]) || "#8f2f24", strokeWidth: 1.8 } };
+    return { ...edge, type: "removable", data: { onRemove: deleteEdge }, style: { stroke: (kind && PORT_COLORS[kind]) || "#8f2f24", strokeWidth: 1.5 } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [edges, graph, results]);
 
   const loadNow = (project: SiftProjectV2) => {
@@ -609,49 +685,76 @@ function Studio() {
     : { state: "saved", text: `Saved ${new Date(meta.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` };
   const viewerSettings: ViewerSettings = meta.settings.viewer ?? DEFAULT_VIEWER_SETTINGS;
 
+  const studio = view === "studio";
+  const sideCollapsed = inspectorCollapsed || !selectedNode;
   return (
-    <main className="studio-shell">
-      <header className="topbar">
-        <a className="brand" href="#workspace" aria-label="Sift home — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}><span>S</span><strong>Sift</strong><small>AI Architectural Form Studio</small></a>
-        <div className="project-title">{view === "studio" && <><span>Project /</span><input aria-label="Project name" value={meta.name} onChange={(event) => setMeta((current) => ({ ...current, name: event.target.value }))} /></>}</div>
-        <div className="topbar__actions"><span className="save-badge" data-state={saveLabel.state} role="status" aria-live="polite">{saveLabel.text}</span><span className="save-state" role="status">{notice}</span>{view === "studio" && <button type="button" className="ghost-button" onClick={() => void persist()}>Save project</button>}{view === "studio" && <button type="button" className="ghost-button" onClick={() => void goToDashboard()}>All projects</button>}</div>
-      </header>
+    <main className={`studio-shell${studio ? " studio-shell--studio" : ""}`}>
+      {!studio && (
+        <header className="topbar">
+          <a className="brand" href="#workspace" aria-label="Sift home — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}><span>S</span><strong>Sift</strong><small>AI Architectural Form Studio</small></a>
+          <div className="topbar__actions"><span className="save-badge" data-state={saveLabel.state} role="status" aria-live="polite">{saveLabel.text}</span><span className="save-state" role="status">{notice}</span></div>
+        </header>
+      )}
 
       {(storageOk === false || saveFailed) && (
         <div className="banner" role="alert">
           <span>{storageOk === false ? "Browser storage is unavailable (private browsing or blocked), so nothing can be saved. Changes will be lost when you close this tab." : "The last save failed (storage may be full or blocked). Your open project is unchanged, but is not saved."}</span>
-          {view === "studio" && <button type="button" onClick={downloadBackup}>Download backup</button>}
-          {view === "studio" && storageOk !== false && <button type="button" onClick={() => void persist()}>Retry save</button>}
+          {studio && <button type="button" onClick={downloadBackup}>Download backup</button>}
+          {studio && storageOk !== false && <button type="button" onClick={() => void persist()}>Retry save</button>}
         </div>
       )}
-      {view === "dashboard" ? (
+      {!studio ? (
         <Dashboard projects={saved} samples={sampleProjects} loading={loadingProjects} notice={notice} onNew={startNew} onOpen={load} onOpenSample={openSample} onImport={(file) => void importBackup(file)} onRename={renameSaved} onDelete={deleteSaved} />
       ) : (
         <section className="workspace" id="workspace">
-          <nav className="project-rail" aria-label="Projects">
-            <div><span className="section-kicker">Starting points</span><h2>Studies</h2></div>
-            <div className="sample-list">
-              {sampleProjects.map((sample, index) => <button type="button" key={sample.id} onClick={() => openSample(sample)}><span>0{index + 1}</span><strong>{sample.name}</strong><small>{SAMPLE_BLURBS[sample.id]?.replace("Featured · ", "") ?? "Open as copy"}</small></button>)}
+          <section className="canvas-panel" aria-label="Generation workflow">
+            <h1 className="visually-hidden">Shape the idea</h1>
+            <div className="project-pill">
+              <a className="brand brand-mark" href="#workspace" aria-label="Sift home — all projects" title="Sift — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}>S</a>
+              <input className="project-pill__name" aria-label="Project name" value={meta.name} onChange={(event) => setMeta((current) => ({ ...current, name: event.target.value }))} />
+              <span className="save-badge" data-state={saveLabel.state} role="status" aria-live="polite">{saveLabel.text}</span>
+              <span className="project-pill__actions">
+                <button type="button" className="pill-button" onClick={() => void persist()}>Save project</button>
+                <button type="button" className="pill-button" onClick={() => void goToDashboard()}>All projects</button>
+              </span>
             </div>
-            <div className="saved-list"><span className="section-kicker">Saved here</span>{saved.length === 0 ? <p>No local projects yet.</p> : saved.slice(0, 4).map((item) => <button type="button" key={item.id} onClick={() => load(item)}>{item.name}</button>)}</div>
-            <footer><span>Local-first</span><p>Your projects stay in this browser.</p></footer>
-          </nav>
-
-          <section className={`canvas-panel ${inspectorCollapsed || !selectedNode ? "canvas-panel--inspector-collapsed" : "canvas-panel--inspector-open"}`} aria-label="Generation workflow">
-            <header className="canvas-panel__header"><div><span className="section-kicker">Workflow</span><h1>Shape the idea</h1></div><span className="provider-chip" title="Change the provider in the Generation node inspector">{provider === "procedural" ? "Local procedural" : `${providerLabel(provider, catalog ?? undefined)} (unverified)`}</span></header>
-            <div className="add-toolbar" role="toolbar" aria-label="Add node">
-              <button type="button" className="toolbar-icon" aria-label="Undo" title="Undo (Ctrl/⌘+Z)" disabled={!historyState.canUndo} onClick={undo}>↶</button>
-              <button type="button" className="toolbar-icon" aria-label="Redo" title="Redo (Ctrl/⌘+Shift+Z)" disabled={!historyState.canRedo} onClick={redo}>↷</button>
-              <span>Add</span>
-              {NODE_ORDER.map((type) => <button type="button" key={type} onClick={() => addFree(type)}>{NODE_LABELS[type]}</button>)}
+            <div className="add-toolbar" role="toolbar" aria-label="Add node" aria-orientation="vertical">
+              {NODE_ORDER.map((type) => (
+                <button type="button" className="tool" key={type} aria-label={`Add ${NODE_LABELS[type]} node`} onClick={() => addFree(type)}>
+                  <NodeGlyph type={type} /><span className="tool__tip" aria-hidden="true">{NODE_LABELS[type]}</span>
+                </button>
+              ))}
+              <span className="add-toolbar__rule" aria-hidden="true" />
+              <button type="button" className="tool" aria-label="Undo" disabled={!historyState.canUndo} onClick={undo}>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M6 3L3 6l3 3M3 6h6a4 4 0 0 1 0 8H7" /></svg>
+                <span className="tool__tip" aria-hidden="true">Undo (Ctrl/⌘+Z)</span>
+              </button>
+              <button type="button" className="tool" aria-label="Redo" disabled={!historyState.canRedo} onClick={redo}>
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d="M10 3l3 3-3 3M13 6H7a4 4 0 0 0 0 8h2" /></svg>
+                <span className="tool__tip" aria-hidden="true">Redo (Ctrl/⌘+Shift+Z)</span>
+              </button>
             </div>
-            <div className="flow-wrap" ref={wrap}>
-              <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onBeforeDelete={async (deletion) => { record(); return deletion; }} onNodeDragStart={() => record()} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} attributionPosition="bottom-left">
-                <Background variant={BackgroundVariant.Dots} gap={22} size={1.1} color="#b9b2a5" />
-                <Controls showInteractive={false} />
-                <MiniMap pannable zoomable nodeColor="#8f2f24" maskColor="rgba(236,232,223,.72)" />
+            <div className="flow-wrap" ref={wrap} tabIndex={-1}>
+              <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onNodeClick={() => setInspectorCollapsed(false)} deleteKeyCode={["Backspace", "Delete"]} onBeforeDelete={async (deletion) => { record(); return deletion; }} onNodeDragStart={() => record()} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} edgeTypes={edgeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} fitViewOptions={fitOptions} attributionPosition="bottom-left">
+                <Background variant={BackgroundVariant.Dots} gap={20} size={1.4} color="#aea797" />
+                <Controls showInteractive={false} orientation="horizontal" position="bottom-right" fitViewOptions={fitOptions}><ZoomReadout /></Controls>
               </ReactFlow>
             </div>
+            {blank && (
+              <div className="canvas-start">
+                <p className="canvas-hint">Start here: write a brief in the <strong>Prompt</strong> node (or pick an example below), then press <strong>Run</strong> on the <strong>Generation</strong> node.</p>
+                <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>
+              </div>
+            )}
+            <p className="save-state" role="status" title={notice}>{notice}</p>
+          </section>
+
+          <div className="side">
+            {preview || hostedBlob ? (
+              <ModelPreview spec={hostedBlob ? undefined : preview?.spec} hosted={hostedBlob ? { blob: hostedBlob, label: `${providerLabel(hostedArtifact?.metadata.origin as string ?? provider, catalog ?? undefined)} GLB` } : undefined} provider={provider} stale={!hostedBlob && Boolean(preview?.stale)} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
+            ) : (
+              <aside className="preview-panel preview-panel--loading" aria-label="3D study preview"><p>No model yet. Write a brief, connect it to a Generation node, and press Run.</p></aside>
+            )}
             <Inspector
               node={selectedNode}
               spec={selectedSpec}
@@ -661,7 +764,7 @@ function Studio() {
               revisionCount={Object.keys(meta.revisions).length}
               versions={selectedId ? versionsOf(meta, selectedId, selectedNode?.artifactId) : []}
               onRestore={restore}
-              collapsed={inspectorCollapsed || !selectedNode}
+              collapsed={sideCollapsed}
               error={editError}
               onToggle={() => setInspectorCollapsed((value) => !value)}
               onProvider={setProvider}
@@ -675,16 +778,9 @@ function Studio() {
               onAccessCode={setAccessCode}
               onCancelJob={() => void cancelJob()}
               onDownloadHosted={downloadHosted}
+              onDeleteNode={() => selectedId && deleteNode(selectedId)}
             />
-            {blank && <p className="canvas-hint">Start here: write a brief in the <strong>Prompt</strong> node (or pick an example below), then press <strong>Run</strong> on the <strong>Generation</strong> node.</p>}
-            {blank && <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>}
-          </section>
-
-          {preview || hostedBlob ? (
-            <ModelPreview spec={hostedBlob ? undefined : preview?.spec} hosted={hostedBlob ? { blob: hostedBlob, label: `${providerLabel(hostedArtifact?.metadata.origin as string ?? provider, catalog ?? undefined)} GLB` } : undefined} provider={provider} stale={!hostedBlob && Boolean(preview?.stale)} settings={viewerSettings} onSettings={(viewer) => setMeta((current) => ({ ...current, settings: { ...current.settings, viewer } }))} />
-          ) : (
-            <aside className="preview-panel preview-panel--loading" aria-label="3D study preview"><p>No model yet. Write a brief, connect it to a Generation node, and press Run.</p></aside>
-          )}
+          </div>
         </section>
       )}
       {confirm && <PaidConfirm providerLabel={providerLabel(confirm.provider, catalog ?? undefined)} costLabel={providerCost(confirm.provider, catalog ?? undefined)} supportsCancel={providerSupportsCancel(confirm.provider, catalog ?? undefined)} prompt={confirm.prompt} accessCode={accessCode} onAccessCode={setAccessCode} busy={confirmBusy} error={confirmError} onConfirm={() => void confirmSpend()} onCancel={() => setConfirm(null)} />}

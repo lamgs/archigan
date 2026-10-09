@@ -1,6 +1,6 @@
 # Sift 2.0
 
-Sift is a focused, xFigura-inspired architectural prompt-to-3D workspace. Describe a building, run it into real parametric 3D massing, branch and edit variations on a node canvas, render PNGs, and export a GLB — locally in your browser, with no account. Optional hosted generation (Meshy) is available behind a server-side key.
+Sift is a focused, xFigura-inspired architectural prompt-to-3D workspace. Describe a building, run it into real parametric 3D massing, branch and edit variations on a node canvas, render PNGs, and export a GLB — locally in your browser, with no account. Optional hosted generation (Tripo) is available behind a server-side key.
 
 > **Scope:** conceptual massing for early design. It is not BIM, structural, code-compliance, or fabrication geometry.
 
@@ -32,7 +32,7 @@ Browser (Next.js App Router client)
   3D viewer (R3F) ───┘          src/lib/typologies.ts    prompt → BuildingSpec (local interpreter)
         │                       src/lib/contracts.ts     Zod schemas = compatibility boundary (schema v2)
         ├── src/lib/storage.ts ─▶ IndexedDB (projects + binary assets); the only persistence dependency
-        └── /api/generate/*   ─▶ src/lib/providers/*  server-only provider adapters (Hunyuan3D, Tripo, Meshy) + spend guard
+        └── /api/generate/*   ─▶ src/lib/providers/*  server-only provider adapters (Tripo) + spend guard
 ```
 
 - **Immutable artifacts.** Building specs, renders, and hosted GLBs are artifacts; edits create child artifacts linked by revisions. Jobs (execution state) are kept separate.
@@ -42,21 +42,18 @@ Browser (Next.js App Router client)
 
 ## Credentials (optional hosted generation)
 
-Hosted generation is **off by default** and fails closed, per provider. A provider is enabled only if its own flag **and** key(s) are set **and** a shared access code is set (copy `.env.example` to `.env.local`):
+Hosted generation (Tripo only, ADR-018) is **off by default** and fails closed. Tripo is enabled only if its flag **and** key are set **and** a shared access code is set (copy `.env.example` to `.env.local`):
 
 | Provider | Flag | Key |
 | --- | --- | --- |
-| Hunyuan3D via fal.ai (Rapid and Pro) | `HUNYUAN_ENABLED=true` | `FAL_KEY` |
-| HY 3D via Tencent Cloud directly (Rapid and Pro) | `TENCENT_HY3D_ENABLED=true` | `TENCENT_SECRET_ID` + `TENCENT_SECRET_KEY` |
 | Tripo | `TRIPO_ENABLED=true` | `TRIPO_API_KEY` |
-| Meshy | `MESHY_ENABLED=true` | `MESHY_API_KEY` |
 
 | Shared variable | Purpose |
 | --- | --- |
-| `SIFT_ACCESS_CODE` | Secret users must type before any paid request (`MESHY_ACCESS_CODE` still works as a fallback). Anyone who has it can spend credits on every enabled provider |
-| `SIFT_DAILY_LIMIT` | Optional per-instance daily cap, counted across all providers (default 20; `MESHY_DAILY_LIMIT` fallback) |
+| `SIFT_ACCESS_CODE` | Secret users must type before any paid request Anyone who has it can spend your Tripo credits |
+| `SIFT_DAILY_LIMIT` | Optional per-instance daily cap, (default 20) |
 
-Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All hosted integrations are unverified:** they were written from SDK sources and documentation summaries (the vendor doc sites were unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
+Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick Local procedural or Tripo in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **The Tripo integration is unverified:** it was written from secondary sources (the vendor doc site was unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
 
 ## Tests
 
@@ -67,11 +64,11 @@ npm run build
 npm run test:e2e    # builds, then Playwright against the production build (:3200)
 ```
 
-The Playwright suite covers the ten acceptance scenarios in [`docs/PRODUCT_REQUIREMENTS.md`](./docs/PRODUCT_REQUIREMENTS.md), the featured sample, responsive layouts at four widths, and axe WCAG A/AA scans, and writes evidence screenshots to [`docs/evidence/`](./docs/evidence). In containers with a pre-installed Chromium it is used automatically (`/opt/pw-browsers/chromium`, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`); elsewhere run `npx playwright install chromium` first. Hosted-provider tests use a **mock** and never call Meshy.
+The Playwright suite covers the ten acceptance scenarios in [`docs/PRODUCT_REQUIREMENTS.md`](./docs/PRODUCT_REQUIREMENTS.md), the featured sample, responsive layouts at four widths, and axe WCAG A/AA scans, and writes evidence screenshots to [`docs/evidence/`](./docs/evidence). In containers with a pre-installed Chromium it is used automatically (`/opt/pw-browsers/chromium`, or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE`); elsewhere run `npx playwright install chromium` first. Hosted-provider tests use a **mock** and never call Tripo.
 
 ## Deployment
 
-Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framework and output directory). The Vercel project is `gabelam/archigan`; the deployment is access-protected, so see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the verification checklist and the Meshy variables. Do not commit secrets.
+Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framework and output directory). The Vercel project is `gabelam/archigan`; the deployment is access-protected, so see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the verification checklist and the Tripo variables. Do not commit secrets.
 
 ## Limitations
 
@@ -83,7 +80,7 @@ Sift deploys to Vercel as a standard Next.js app (`vercel.json` pins the framewo
 
 ## Independence and provenance
 
-Sift is an independent project. It is **inspired by** the spatial node-workflow idea of tools like xFigura but is not affiliated with, endorsed by, or built from xFigura or Meshy, and it uses no proprietary data. The repository began as a PyTorch voxel 3D-GAN research prototype ("ArchiGAN"); those Python files are preserved below for provenance only and are not used by, or required for, the product. No models are trained and no training data is collected.
+Sift is an independent project. It is **inspired by** the spatial node-workflow idea of tools like xFigura but is not affiliated with, endorsed by, or built from xFigura or Tripo, and it uses no proprietary data. The repository began as a PyTorch voxel 3D-GAN research prototype ("ArchiGAN"); those Python files are preserved below for provenance only and are not used by, or required for, the product. No models are trained and no training data is collected.
 
 Project coordination for contributors and AI agents lives in [`AGENTS.md`](./AGENTS.md), with current state in [`docs/STATUS.md`](./docs/STATUS.md) and acceptance criteria in [`docs/TASKS.md`](./docs/TASKS.md).
 
