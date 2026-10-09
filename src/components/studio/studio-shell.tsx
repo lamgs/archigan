@@ -689,7 +689,7 @@ function Studio() {
               <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} deleteKeyCode={["Backspace", "Delete"]} onBeforeDelete={async (deletion) => { record(); return deletion; }} onNodeDragStart={() => record()} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} edgeTypes={edgeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} attributionPosition="bottom-left">
                 <Background variant={BackgroundVariant.Dots} gap={22} size={1.1} color="#b9b2a5" />
                 <Controls showInteractive={false} />
-                <MiniMap pannable zoomable nodeColor="#8f2f24" maskColor="rgba(236,232,223,.72)" />
+                <MiniMap style={{ width: 160, height: 104 }} pannable zoomable nodeColor="#8f2f24" maskColor="rgba(236,232,223,.72)" />
               </ReactFlow>
             </div>
             <Inspector
