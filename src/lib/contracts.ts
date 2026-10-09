@@ -4,7 +4,7 @@ import { z } from "zod";
  * `procedural` and `meshy` are the original values; later values were added backward-compatibly (ADR-017). Older builds
  * cannot read projects that use a newer value, so rolling back a deployment can make such projects fail to open.
  */
-export const providerSchema = z.enum(["procedural", "meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro"]);
+export const providerSchema = z.enum(["procedural", "meshy", "tripo", "hunyuan3d-rapid", "hunyuan3d-pro", "tencent-rapid", "tencent-pro"]);
 export type Provider = z.infer<typeof providerSchema>;
 
 export const massingSpecSchema = z.object({

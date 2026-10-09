@@ -4,26 +4,36 @@ import { clampProgress, hostedConfig, mapHttpError, timedFetch } from "./http";
 import { MAX_GLB_BYTES, ProviderError, type Fetch, type HostedProvider, type JobStatus, type NormalizedTask } from "./types";
 
 /**
- * Tripo text-to-model adapter — server-side only.
+ * Tripo text-to-model adapter (v3 API) — server-side only.
  *
- * EVERYTHING BELOW IS UNVERIFIED: Tripo's official docs (platform.tripo3d.ai / docs.tripo3d.ai) could not be fetched
- * when this was written; the contract comes from search snippets and recollection of the v2 API. It has NOT been
- * exercised against a live account, so parsing is deliberately lenient and `config().verified` is always false.
+ * Tripo's own docs (developers.tripo3d.ai, docs.tripo3d.ai, platform.tripo3d.ai) were NOT readable from the build
+ * environment (egress-blocked). The v3 contract below was reconstructed from secondary sources that cite those docs
+ * (third-party open-source clients on GitHub that state they were checked against developers.tripo3d.ai quick-start,
+ * e.g. Mikefluff/skills "verified 2026-08-08", codeofaxel/Kiln, levy-street/world-of-claudecraft, gridaco/grida;
+ * VAST-AI-Research/tripo-python-sdk client.py/API.md) plus search snippets. Nothing has been exercised against a live
+ * account, so `config().verified` is always false.
  *
- * Assumed v2 contract (UNVERIFIED):
- *  - Base https://api.tripo3d.ai/v2/openapi, `Authorization: Bearer $TRIPO_API_KEY`.
- *  - Create: POST /task {type:"text_to_model", prompt} -> {code:0, data:{task_id}}.
- *  - Status: GET /task/{task_id} -> {code:0, data:{task_id,type,status,progress,output:{model,pbr_model,base_model,rendered_image}}}
- *    with status queued|running|success|failed|cancelled|unknown|banned|expired. Newer docs mention `output.model_url`
- *    (sample file model_pbr.glb); we accept the first of output.pbr_model / output.model / output.model_url (string or {url}).
- *  - AMBIGUITY: Tripo's newer "v3" docs describe dedicated per-capability endpoints (keys reportedly shared between v2/v3).
- *    We keep the v2 single-endpoint contract; change TRIPO_BASE_URL / TRIPO_TASK_PATH below if that proves wrong.
- *  - A non-zero envelope `code` is an error (2010 ~ insufficient credits, 2000 ~ rate limit; mapped leniently).
- *  - No cancel endpoint is known, so cancel is unsupported and never touches the network.
- *  - Pricing could not be confirmed; no numbers are invented.
+ * Agreed by several independent secondary sources (reasonably, not officially, confirmed):
+ *  - Base https://openapi.tripo3d.ai/v3, `Authorization: Bearer $TRIPO_API_KEY` (keys shared with v2).
+ *  - Create: POST /generation/text-to-model {model, prompt, ...} -> {code:0, data:{task_id}}.
+ *  - Status: GET /tasks/{task_id} -> {code:0, data:{task_id,status,progress,output:{model_url,rendered_image_url,...},
+ *    error_code?,error_msg?,consumed_credit?}}; status queued|running|success|failed|cancelled|unknown|banned|expired.
+ *  - GLB at output.model_url; the URL expires about 5 minutes after success (download immediately).
+ *  - Prompt max 1024 chars; `texture`, `pbr`, `face_limit`, `negative_prompt`, `texture_quality` are optional body fields.
+ *  - Envelope code 2010 = insufficient credits (also seen as HTTP 403); 401 = bad key; 429/5xx are retryable.
+ *
+ * UNVERIFIED:
+ *  - Whether `model` is required (one source says yes, the v2->v3 migration snippet shows {prompt} only). We always send
+ *    TRIPO_MODEL (field name is `model`, not v2's `model_version`); change the constant if Tripo retires it.
+ *  - Exact cost of the chosen model/flags (texture and pbr are sent false to keep generation cheap); progress scale (0-100 assumed).
+ *  - Rate-limit envelope code (2000 assumed), content-policy behaviour beyond status "banned".
+ *  - Cancel/delete: no v3 cancel endpoint appears in any readable source, so cancel is unsupported and never hits the network.
+ *  - Pricing could not be confirmed; no numbers are invented. v2 output shapes (pbr_model/model) are still tolerated.
  */
-export const TRIPO_BASE_URL = "https://api.tripo3d.ai/v2/openapi";
-export const TRIPO_TASK_PATH = "/task";
+export const TRIPO_BASE_URL = "https://openapi.tripo3d.ai/v3";
+export const TRIPO_CREATE_PATH = "/generation/text-to-model";
+export const TRIPO_TASK_PATH = "/tasks";
+export const TRIPO_MODEL = "v3.1-20260211";
 const ASSET_HOSTS = ["tripo3d.com", "tripo3d.ai"] as const;
 const MAX_PROMPT_CHARS = 1024; // conservative; Tripo's real limit is unconfirmed
 const TASK_ID = /^[A-Za-z0-9_-]{6,80}$/;
@@ -36,7 +46,7 @@ const envelopeSchema = z.object({
     task_id: z.string().optional(),
     status: z.string().optional(),
     progress: z.number().optional(),
-    output: z.object({ pbr_model: urlish, model: urlish, model_url: urlish }).passthrough().nullish(),
+    output: z.object({ model_url: urlish, pbr_model: urlish, model: urlish }).passthrough().nullish(),
   }).passthrough().nullish(),
 }).passthrough();
 type Envelope = z.infer<typeof envelopeSchema>;
@@ -84,7 +94,7 @@ export function normalizeTripoTask(raw: unknown, fallbackId = ""): NormalizedTas
   if (!status) return failure(id, "unknown-status", `Tripo reported an unrecognized status “${data.status ?? "none"}”.`);
   if (status === "completed") {
     const out = data.output;
-    const glbUrl = urlOf(out?.pbr_model) ?? urlOf(out?.model) ?? urlOf(out?.model_url);
+    const glbUrl = urlOf(out?.model_url) ?? urlOf(out?.pbr_model) ?? urlOf(out?.model);
     if (!glbUrl) return failure(id, "no-glb", "Tripo finished but did not provide a GLB file.");
     const expiresAt = expiryOf(glbUrl);
     return { providerTaskId: id, status, progress: progress ?? 100, glbUrl, ...(expiresAt && { expiresAt }) };
@@ -104,7 +114,14 @@ async function call(path: string, init: RequestInit, fetchImpl: Fetch, env: Reco
   const key = env.TRIPO_API_KEY;
   if (!key) throw new ProviderError("not-configured", "Tripo is not configured on the server.", 503, false);
   const response = await timedFetch("Tripo", `${TRIPO_BASE_URL}${path}`, { ...init, headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...init.headers } }, fetchImpl);
-  if (!response.ok) throw mapHttpError(response.status, response.headers.get("retry-after"), "Tripo");
+  if (!response.ok) {
+    // Tripo reports out-of-credits as HTTP 403 with envelope code 2010; plain 403 stays an auth failure.
+    if (response.status === 403 || response.status === 402) {
+      const parsed = envelopeSchema.safeParse(await response.json().catch(() => null));
+      if (parsed.success && parsed.data.code === 2010) throw envelopeError(parsed.data);
+    }
+    throw mapHttpError(response.status, response.headers.get("retry-after"), "Tripo");
+  }
   const body = envelopeSchema.safeParse(await response.json().catch(() => null));
   if (!body.success) throw new ProviderError("bad-response", "Tripo returned a response this app does not understand.", 502, false);
   if (body.data.code !== undefined && body.data.code !== 0) throw envelopeError(body.data);
@@ -120,8 +137,8 @@ export const tripoProvider: HostedProvider = {
   maxGlbBytes: MAX_GLB_BYTES,
   config: (env) => hostedConfig(env, "TRIPO_ENABLED", ["TRIPO_API_KEY"]),
   async create(prompt, refinement, fetchImpl = fetch) {
-    const body = { type: "text_to_model", prompt: truncatePrompt(composeArchitecturalPrompt(prompt, refinement)) };
-    const result = await call(TRIPO_TASK_PATH, { method: "POST", body: JSON.stringify(body) }, fetchImpl, process.env);
+    const body = { model: TRIPO_MODEL, prompt: truncatePrompt(composeArchitecturalPrompt(prompt, refinement)), texture: false, pbr: false };
+    const result = await call(TRIPO_CREATE_PATH, { method: "POST", body: JSON.stringify(body) }, fetchImpl, process.env);
     const id = result.data?.task_id;
     if (typeof id !== "string" || !TASK_ID.test(id)) throw new ProviderError("bad-response", "Tripo did not return a usable task ID.", 502, false);
     return id;

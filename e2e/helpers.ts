@@ -103,10 +103,12 @@ export function boxGlb(): Buffer {
   return Buffer.concat([head, c1, j, c2, b]);
 }
 
-export type FakeProviderId = "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro";
+export type FakeProviderId = "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" | "tencent-rapid" | "tencent-pro";
 export const FAKE_PROVIDERS: Record<FakeProviderId, { label: string; costLabel: string; supportsCancel: boolean }> = {
   "hunyuan3d-rapid": { label: "Hunyuan3D Rapid", costLabel: "about $0.30 per model", supportsCancel: true },
   "hunyuan3d-pro": { label: "Hunyuan3D Pro", costLabel: "about $0.50 per model", supportsCancel: true },
+  "tencent-rapid": { label: "HY 3D Rapid (Tencent)", costLabel: "about $0.20 per model", supportsCancel: false },
+  "tencent-pro": { label: "HY 3D Pro (Tencent)", costLabel: "about $0.35 per model", supportsCancel: false },
   tripo: { label: "Tripo", costLabel: "about $0.40 per model", supportsCancel: false },
   meshy: { label: "Meshy", costLabel: "about 20 credits", supportsCancel: true },
 };

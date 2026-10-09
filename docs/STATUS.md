@@ -32,8 +32,8 @@ Verified from a **fresh clone of the remote branch**: `npm ci` → lint clean �
 
 ## Deployment
 
-- Vercel project: `booth-os/archigan`.
-- Recorded URL: `https://archigan-ctjx7uh6t-booth-os.vercel.app`.
+- Vercel project: `gabelam/archigan` (team is `gabelam`, owner-confirmed 2026-10-08; older notes saying `booth-os` are outdated).
+- Production domain: `https://archigan.vercel.app` (stable; per-deployment URLs change every build and are not recorded).
 - 2026-10-09: all deployments from `f43fc44` through P0.12 failed on Vercel; adding `vercel.json` (framework `nextjs`) made commit `6fa7198` deploy successfully per the GitHub `Vercel` status. Logs/runtime remain unverified.
 - Observed 2026-10-08: hostname responds with a `302` redirect to Vercel SSO/Deployment Protection.
 - Deployment metadata and authenticated application smoke test remain unverified because this session lacks `booth-os` connector/CLI authorization. See `DEPLOYMENT.md`.
@@ -45,7 +45,7 @@ Record anything that stops or limits work here (with the date and what would unb
 | Date | Blocker | Effect | What would unblock it |
 | --- | --- | --- | --- |
 | 2026-10-09 | `docs.meshy.ai` is blocked by the agent network proxy (WebFetch `EGRESS_BLOCKED`); only search snippets were readable. | The Meshy adapter follows the publicly documented contract as summarized by search (statuses, endpoints, DELETE 409 on running tasks); exact response field names (`model_urls`, `task_error`, `expires_at`) are unconfirmed, so parsing is lenient and everything is labelled **unverified**. | Allow `docs.meshy.ai` through the proxy, or paste the Text-to-3D reference; or run one real task and compare the JSON. |
-| 2026-10-08 | `fal.ai`, `docs.fal.ai`, `platform.tripo3d.ai` are blocked by the egress proxy; only search snippets were readable. | Hunyuan3D (fal queue endpoints `fal-ai/hunyuan-3d/v3.1/{rapid,pro}/text-to-3d`, app-id status/result/cancel URLs, `model_glb`, `enable_pbr`/`enable_geometry`/`face_count`, prompt limits, 403 balance wording, cancel 400) and Tripo (v2 `/task` vs v3 per-capability endpoints, body fields, `output.*` names, envelope codes 2010/2000, asset hosts, no cancel) adapters are **UNVERIFIED**, implemented leniently. Prices: Hunyuan ≈ $0.225/$0.375 from fal pages; Tripo cost unconfirmed. | Allow `fal.ai`/`tripo3d.ai` docs through the proxy, or run one real task per provider and compare the JSON (DEPLOYMENT smoke test). |
+| 2026-10-08 | `fal.ai`, `docs.fal.ai`, `platform.tripo3d.ai` are blocked by the egress proxy; only search snippets were readable. | Tencent Cloud direct (`tencent-rapid`/`tencent-pro`): contract taken from the Go SDK `models.go` (readable); host/region, error-code families, `JobId` format, result hosts and English-prompt support are unconfirmed; signing has no official known-answer vector. Tripo was moved to **v3** from secondary sources (create path, `model` name, `output.model_url`, error codes, price all unconfirmed). Hunyuan3D (fal queue endpoints `fal-ai/hunyuan-3d/v3.1/{rapid,pro}/text-to-3d`, app-id status/result/cancel URLs, `model_glb`, `enable_pbr`/`enable_geometry`/`face_count`, prompt limits, 403 balance wording, cancel 400) and Tripo (v2 `/task` vs v3 per-capability endpoints, body fields, `output.*` names, envelope codes 2010/2000, asset hosts, no cancel) adapters are **UNVERIFIED**, implemented leniently. Prices: Hunyuan ≈ $0.225/$0.375 from fal pages; Tripo cost unconfirmed. | Allow `fal.ai`/`tripo3d.ai` docs through the proxy, or run one real task per provider and compare the JSON (DEPLOYMENT smoke test). |
 | 2026-10-09 | No hosted-provider API key/account (Meshy, Tripo, fal.ai) in this environment. | No live hosted call has ever been made for any provider. Only mocked documented-contract tests exist; `verified` is hard-wired `false`. | A paid key per provider (`MESHY_API_KEY`/`TRIPO_API_KEY`/`FAL_KEY` + its `*_ENABLED=true` + `SIFT_ACCESS_CODE`) in a trusted environment, then the manual smoke test in `DEPLOYMENT.md`. |
 | 2026-10-09 | All WebGL checks ran in headless Chromium on SwiftShader (software rendering) in this container. | Real-GPU frame rates, memory pressure, mobile GPUs, Safari/Firefox, and the `deviceMemory` heuristic for 1920×1080 are untested. | Manual pass on real desktop + mobile devices/browsers; record results here. |
 | 2026-10-09 | `vercel.com` / `api.vercel.com` are unreachable and no Vercel token is available. | Build logs and the deployed app (behind Deployment Protection) cannot be inspected by the agent; deploy health is inferred from GitHub commit statuses only. | An authorized Vercel identity (`vercel inspect <id> --logs`), or the user pasting logs/errors. |
@@ -72,6 +72,10 @@ Record anything that stops or limits work here (with the date and what would unb
 - Client-side PNG and GLB export paths.
 - Server-only Meshy adapter boundary and configuration status.
 - Browser-verified prompt/refinement generation, IndexedDB save, 3D rendering, camera controls, and GLB export completion.
+
+## Hosted setup tooling
+
+`npm run check:hosted` (`scripts/check-hosted-config.mjs`) is an offline preflight for provider configuration (flags, keys, access code, `NEXT_PUBLIC_` mistakes); it makes no vendor calls. It only checks configuration — E1 stays open until a real-account smoke test is recorded.
 
 ## Known limitations
 

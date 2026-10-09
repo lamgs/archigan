@@ -2,6 +2,14 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-08 — Claude — Tencent direct adapter + Tripo v3 (UNVERIFIED)
+
+- Added `tencent-rapid` / `tencent-pro` (`src/lib/providers/tencent.ts`): TC3-HMAC-SHA256 signing via `node:crypto` (pure `signTc3`, tested against an independent derivation — no official vector exists), actions `SubmitHunyuanTo3D{Rapid,Pro}Job` / `Query…`, GLB selection from `ResultFile3Ds`, 24 h expiry, no cancel. Env: `TENCENT_HY3D_ENABLED`, `TENCENT_SECRET_ID`, `TENCENT_SECRET_KEY`. Wired through enum, registry, picker metadata, preflight, `.env.example`, e2e scenario 9 (now 6 providers).
+- Tripo adapter moved to v3 (`openapi.tripo3d.ai/v3`, `/generation/text-to-model`, `/tasks/{id}`); result URLs reportedly expire ≈5 min, which the fresh-lookup `/model` route already handles.
+- Added `npm run check:hosted` offline preflight and the setup checklist; owner chose Vercel team `gabelam`, domain `archigan.vercel.app`; Meshy skipped (free tier has no API keys).
+- Open: a first real Tencent task will show the real `JobId` shape (shared task-id pattern may need loosening), region/host, result hosts, and whether Rapid takes English text. First real Tripo task validates v3.
+- Next: owner creates Tencent/Tripo keys, enables one provider at a time with `SIFT_DAILY_LIMIT=3`, runs one task, and pastes the redacted error/result.
+
 ## 2026-10-08 — Claude — P1.02 multi-provider hosted generation (Hunyuan3D, Tripo, Meshy) — implemented, UNVERIFIED live
 
 - **Server:** provider-neutral `HostedProvider` interface + registry (`src/lib/providers/{types,http,registry}.ts`); Meshy refactored onto it with its tests unchanged (one tightening: GLB downloads refuse redirects). New adapters `tripo.ts` (v2 `/task`, `text_to_model`, no cancel) and `hunyuan.ts` (fal.ai queue; `hunyuan3d-rapid` / `hunyuan3d-pro` ids). Per-provider fail-closed config (own flag + key + shared `SIFT_ACCESS_CODE`, `MESHY_ACCESS_CODE` fallback); one limiter counts per-IP/daily across providers (`SIFT_DAILY_LIMIT`, `MESHY_DAILY_LIMIT` fallback). Task routes take `?provider=` (default meshy); `/api/providers` is a secret-free catalog.

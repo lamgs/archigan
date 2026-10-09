@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
-    "test:all": "npm run lint && npm run test && npm run test:e2e"
+    "test:all": "npm run lint && npm run test && npm run test:e2e",
+    "check:hosted": "node --env-file-if-exists=.env.local scripts/check-hosted-config.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "^9.8.1",
