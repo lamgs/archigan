@@ -79,7 +79,10 @@ function Studio() {
     void listProjects().then(setSaved).catch(() => setNotice("Local storage is unavailable; this session still works.")).finally(() => setLoadingProjects(false));
     void probeStorage().then(setStorageOk);
     queueMicrotask(() => setGpu(probeGpu())); // browser-only capability probe
-    void fetch("/api/providers").then((response) => response.json()).then((data: ProviderCatalog) => setCatalog(data)).catch(() => setCatalog(null));
+    void fetch("/api/providers", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error(String(response.status)))))
+      .then((data: ProviderCatalog) => setCatalog(data))
+      .catch(() => { setCatalog(null); setNotice("Could not read provider status from the server, so hosted providers appear unavailable. Reload to retry."); });
   }, []);
 
   const graph = useMemo<FlowGraph>(() => ({
