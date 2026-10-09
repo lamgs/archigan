@@ -73,24 +73,23 @@ describe("Dashboard", () => {
 });
 
 describe("PaidConfirm", () => {
-  const props = { providerLabel: "Meshy", costLabel: "≈ 20 credits", supportsCancel: true, prompt: "A tower by the sea", accessCode: "", onAccessCode: vi.fn(), busy: false, error: null, onConfirm: vi.fn(), onCancel: vi.fn() };
+  const props = { providerLabel: "Tripo", costLabel: "≈ $0.30 per model (estimate)", supportsCancel: false, prompt: "A tower by the sea", accessCode: "", onAccessCode: vi.fn(), busy: false, error: null, onConfirm: vi.fn(), onCancel: vi.fn() };
 
   it("names the provider, shows the brief, and blocks confirmation without an access code", () => {
     render(<PaidConfirm {...props} />);
     const dialog = screen.getByRole("alertdialog");
-    expect(dialog.textContent).toMatch(/Meshy/);
+    expect(screen.getByRole("heading").textContent).toBe("Spend Tripo credits?");
     expect(dialog.textContent).toMatch(/credits/);
     expect(dialog.textContent).toMatch(/A tower by the sea/);
     expect((screen.getByRole("button", { name: /Spend credits/ }) as HTMLButtonElement).disabled).toBe(true);
   });
-  it.each([["Hunyuan3D Rapid", true], ["Hunyuan3D Pro", true], ["Tripo", false], ["Meshy", true]])("names the selected provider %s, shows the cost as an estimate and the cancel semantics", (label, supportsCancel) => {
-    render(<PaidConfirm {...props} providerLabel={label as string} costLabel="about $0.30" supportsCancel={supportsCancel as boolean} />);
+  it.each([["Tripo", false], ["Another provider", true]])("names the selected provider %s, shows the cost as an estimate and the cancel semantics", (label, supportsCancel) => {
+    render(<PaidConfirm {...props} providerLabel={label as string} supportsCancel={supportsCancel as boolean} />);
     expect(screen.getByRole("heading").textContent).toBe(`Spend ${label} credits?`);
     const text = screen.getByRole("alertdialog").textContent ?? "";
-    expect(text).toMatch(/about \$0\.30 \(an estimate/);
+    expect(text).toMatch(/Approximate cost per generation: ≈ \$0\.30 per model \(estimate\)/);
     expect(text).toMatch(supportsCancel ? /can only be cancelled while it is still queued/ : /cannot be cancelled once started/);
-    expect(screen.getByRole("button", { name: /Spend credits/ })).toBeTruthy();
-    if (label !== "Meshy") expect(text).not.toMatch(/Meshy/);
+    expect(text).not.toMatch(/Meshy|Hunyuan/);
   });
   it("confirms only with a code, cancels with the button or Escape, and reports errors", () => {
     const onConfirm = vi.fn(); const onCancel = vi.fn();
@@ -114,7 +113,7 @@ describe("Inspector", () => {
   const spec = deriveBuildingSpec("A terraced stepped tower with a podium");
   const hosted: HostedPanelState = { configured: false, accessCode: "", error: null, modelInfo: null, cannotCancelNotice: false };
   const renderState: RenderPanelState = { settings: DEFAULT_RENDER_SETTINGS, resolutions: ["1024x1024", "1600x900"], gpuKnown: true, busy: false, error: null, imageUrl: null, imageInfo: null, fresh: false };
-  const base = { spec, provider: "procedural" as const, catalog: null, revisionCount: 0, versions: [], onRestore: vi.fn(), collapsed: false, error: null, onToggle: vi.fn(), onProvider: vi.fn(), onEdit: vi.fn(), onClearEdits: vi.fn(), render: renderState, canRender: true, onRenderSetting: vi.fn(), onRender: vi.fn(), hosted, onAccessCode: vi.fn(), onCancelJob: vi.fn(), onDownloadHosted: vi.fn() };
+  const base = { spec, provider: "procedural" as const, catalog: null, revisionCount: 0, versions: [], onRestore: vi.fn(), collapsed: false, error: null, onToggle: vi.fn(), onProvider: vi.fn(), onEdit: vi.fn(), onClearEdits: vi.fn(), render: renderState, canRender: true, onRenderSetting: vi.fn(), onRender: vi.fn(), hosted, onAccessCode: vi.fn(), onCancelJob: vi.fn(), onDownloadHosted: vi.fn(), onDeleteNode: vi.fn() };
   const node = (type: "prompt" | "generation" | "variation" | "model" | "render") => ({ id: "n", type, position: { x: 0, y: 0 }, params: {} as Record<string, unknown> });
 
   it("shows only the controls relevant to the selected node", () => {
@@ -147,43 +146,68 @@ describe("Inspector", () => {
     expect(onEdit).not.toHaveBeenCalled();
   });
 
-  const entry = (configured: boolean, extra = {}) => ({ label: "x", costLabel: "about $1", supportsCancel: true, configured, enabled: configured, hasKey: configured, accessCodeRequired: configured, verified: false, ...extra });
-  const catalogAll = (configured: boolean) => ({ procedural: { configured: true, verified: true }, meshy: entry(configured, { label: "Meshy" }), tripo: entry(configured, { label: "Tripo", costLabel: "about $0.40" }), "hunyuan3d-rapid": entry(configured, { label: "Hunyuan3D Rapid" }), "hunyuan3d-pro": entry(configured, { label: "Hunyuan3D Pro" }) });
+  const entry = (configured: boolean, extra = {}) => ({ label: "Tripo", costLabel: "≈ $0.30 per model (estimate)", supportsCancel: false, configured, enabled: configured, hasKey: configured, accessCodeRequired: configured, verified: false, ...extra });
+  const catalogAll = (configured: boolean) => ({ procedural: { configured: true, verified: true }, tripo: entry(configured) });
 
-  it("lists every provider; unconfigured hosted ones are disabled with setup guidance and an unverified label", () => {
-    render(<Inspector {...base} node={node("generation")} catalog={catalogAll(false)} />);
-    for (const [name, vars] of [[/Hunyuan3D Rapid/, ["HUNYUAN_ENABLED", "FAL_KEY"]], [/Hunyuan3D Pro/, ["HUNYUAN_ENABLED", "FAL_KEY"]], [/Tripo/, ["TRIPO_ENABLED", "TRIPO_API_KEY"]], [/Meshy/, ["MESHY_ENABLED", "MESHY_API_KEY"]]] as const) {
-      const radio = screen.getByLabelText(name) as HTMLInputElement;
-      expect(radio.disabled).toBe(true);
-      const option = radio.closest("label")!;
-      expect(option.textContent).toMatch(/not configured on this server/);
-      expect(option.textContent).toMatch(/unverified/);
-      vars.forEach((v) => expect(option.textContent).toContain(v));
-      expect(option.textContent).toContain("SIFT_ACCESS_CODE");
+  it("lists exactly Local and Tripo as identical cards: name line plus one cost line", () => {
+    render(<Inspector {...base} node={node("generation")} catalog={catalogAll(true)} />);
+    const cards = screen.getAllByRole("radio").map((radio) => radio.closest("label")!);
+    expect(cards.map((card) => card.getAttribute("data-provider"))).toEqual(["procedural", "tripo"]);
+    for (const card of cards) {
+      expect(card.querySelectorAll(".provider-option__name").length).toBe(1);
+      expect(card.querySelectorAll(".provider-option__desc").length).toBe(1);
     }
+    expect(cards[0].querySelector(".provider-option__desc")!.textContent).toBe("Free");
+    expect(cards[1].querySelector(".provider-option__desc")!.textContent).toBe("≈ $0.30 per model (estimate)");
+    const text = cards.map((card) => card.textContent).join(" ");
+    expect(text).not.toMatch(/\(paid\)|estimate, not a quote|Set [A-Z_]+=true|Meshy|Hunyuan|HY 3D/);
+  });
+
+  it("never presents Tripo as verified: a compact Unverified chip stays on the card", () => {
+    render(<Inspector {...base} node={node("generation")} catalog={catalogAll(true)} />);
+    const tripo = (screen.getByLabelText(/Tripo/) as HTMLInputElement).closest("label")!;
+    expect(tripo.querySelector(".chip--unverified")!.textContent).toBe("Unverified");
+    expect(screen.getByLabelText(/Local procedural/).closest("label")!.querySelector(".chip--unverified")).toBeNull();
+  });
+
+  it("disables an unconfigured Tripo with a short hint and no setup instructions", () => {
+    render(<Inspector {...base} node={node("generation")} catalog={catalogAll(false)} />);
+    const radio = screen.getByLabelText(/Tripo/) as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+    const text = radio.closest("label")!.textContent ?? "";
+    expect(text).toMatch(/Not configured on this server/);
+    expect(text).not.toMatch(/TRIPO_|SIFT_ACCESS_CODE/);
     expect((screen.getByLabelText(/Local procedural/) as HTMLInputElement).checked).toBe(true);
   });
 
-  it("enables configured providers, labels them unverified, shows the cost as an estimate, and reports selection", () => {
+  it("enables a configured Tripo and reports selection", () => {
     const onProvider = vi.fn();
     render(<Inspector {...base} node={node("generation")} catalog={catalogAll(true)} onProvider={onProvider} />);
     const tripo = screen.getByLabelText(/Tripo/) as HTMLInputElement;
     expect(tripo.disabled).toBe(false);
-    expect(tripo.closest("label")!.textContent).toMatch(/configured · unverified/);
-    expect(tripo.closest("label")!.textContent).toMatch(/Estimated cost per generation: about \$0\.40 \(estimate, not a quote\)/);
     fireEvent.click(tripo);
     expect(onProvider).toHaveBeenCalledWith("tripo");
-    fireEvent.click(screen.getByLabelText(/Hunyuan3D Pro/));
-    expect(onProvider).toHaveBeenCalledWith("hunyuan3d-pro");
-    screen.getAllByRole("radio").filter((r) => (r.closest("label")?.textContent ?? "").includes("(paid)")).forEach((r) => expect(r.closest("label")!.textContent).toMatch(/unverified/));
   });
 
-  it("keeps an already-selected but now unconfigured provider selectable and falls back to static cost metadata", () => {
-    render(<Inspector {...base} node={node("generation")} provider="hunyuan3d-rapid" catalog={{}} />);
-    const radio = screen.getByLabelText(/Hunyuan3D Rapid/) as HTMLInputElement;
+  it("keeps an already-selected but now unconfigured Tripo selectable and falls back to static cost metadata", () => {
+    render(<Inspector {...base} node={node("generation")} provider="tripo" catalog={{}} />);
+    const radio = screen.getByLabelText(/Tripo/) as HTMLInputElement;
     expect(radio.checked).toBe(true);
     expect(radio.disabled).toBe(false);
-    expect(radio.closest("label")!.textContent).toMatch(/Estimated cost per generation: unconfirmed/);
+    expect(radio.closest("label")!.querySelector(".provider-option__desc")!.textContent).toMatch(/≈ \$0\.30 per model/);
+  });
+
+  it("offers a named Delete node button that calls back, for every node type", () => {
+    const onDeleteNode = vi.fn();
+    const { rerender } = render(<Inspector {...base} node={node("prompt")} spec={undefined} onDeleteNode={onDeleteNode} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete node" }));
+    expect(onDeleteNode).toHaveBeenCalledTimes(1);
+    for (const type of ["generation", "variation", "model", "render"] as const) {
+      rerender(<Inspector {...base} node={node(type)} onDeleteNode={onDeleteNode} />);
+      expect(screen.getByRole("button", { name: "Delete node" })).toBeTruthy();
+    }
+    rerender(<Inspector {...base} node={undefined} onDeleteNode={onDeleteNode} />);
+    expect(screen.queryByRole("button", { name: "Delete node" })).toBeNull();
   });
 
   it("explains missing WebGL in the render panel and disables rendering", () => {
@@ -210,31 +234,36 @@ describe("Inspector", () => {
   });
 
   it("shows hosted job progress, access-code prompts, and failure messages", () => {
-    const job = { id: "j", nodeId: "n", provider: "meshy" as const, providerTaskId: "task-1", status: "running" as const, progress: 40 };
-    render(<Inspector {...base} node={node("generation")} provider="meshy" catalog={catalogAll(true)} hosted={{ ...hosted, configured: true, job, error: "Meshy rejected the key." }} />);
+    const job = { id: "j", nodeId: "n", provider: "tripo" as const, providerTaskId: "task-1", status: "running" as const, progress: 40 };
+    render(<Inspector {...base} node={node("generation")} provider="tripo" catalog={catalogAll(true)} hosted={{ ...hosted, configured: true, job, error: "Tripo rejected the key." }} />);
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("40");
     expect(screen.getByText(/Enter the access code to resume/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Stop waiting" })).toBeTruthy();
-    expect(screen.getByText("Meshy rejected the key.")).toBeTruthy();
+    expect(screen.getByText("Tripo rejected the key.")).toBeTruthy();
   });
 
   it("offers Cancel task only for queued jobs at providers that support cancel; others only stop waiting", () => {
-    const queued = (provider: "meshy" | "tripo") => ({ id: "j", nodeId: "n", provider, providerTaskId: "task-1", status: "queued" as const, progress: 0 });
-    const cat = { ...catalogAll(true), tripo: entry(true, { label: "Tripo", supportsCancel: false }) };
-    const { rerender } = render(<Inspector {...base} node={node("generation")} provider="meshy" catalog={cat} hosted={{ ...hosted, configured: true, job: queued("meshy") }} />);
-    expect(screen.getByRole("button", { name: "Cancel task" })).toBeTruthy();
-    rerender(<Inspector {...base} node={node("generation")} provider="tripo" catalog={cat} hosted={{ ...hosted, configured: true, job: queued("tripo") }} />);
+    const queued = { id: "j", nodeId: "n", provider: "tripo" as const, providerTaskId: "task-1", status: "queued" as const, progress: 0 };
+    const { rerender } = render(<Inspector {...base} node={node("generation")} provider="tripo" catalog={catalogAll(true)} hosted={{ ...hosted, configured: true, job: queued }} />);
     expect(screen.queryByRole("button", { name: "Cancel task" })).toBeNull();
     expect(screen.getByRole("button", { name: "Stop waiting" })).toBeTruthy();
     expect(screen.getByText(/Tripo tasks cannot be cancelled; this app can only stop waiting/)).toBeTruthy();
     expect(screen.getByText("Queued at Tripo")).toBeTruthy();
-    expect(screen.getByText(/Hosted job · Tripo \(unverified\)/)).toBeTruthy();
+    expect(screen.getByText(/Hosted job · Tripo/)).toBeTruthy();
+    rerender(<Inspector {...base} node={node("generation")} provider="tripo" catalog={{ ...catalogAll(true), tripo: entry(true, { supportsCancel: true }) }} hosted={{ ...hosted, configured: true, job: queued }} />);
+    expect(screen.getByRole("button", { name: "Cancel task" })).toBeTruthy();
   });
 
-  it("names the job's own provider even when another provider is selected", () => {
+  it("names the job's own provider even when Local is selected", () => {
     const job = { id: "j", nodeId: "n", provider: "tripo" as const, providerTaskId: "task-1", status: "running" as const, progress: 10 };
     render(<Inspector {...base} node={node("generation")} provider="procedural" catalog={catalogAll(true)} hosted={{ ...hosted, configured: true, job }} />);
     expect(screen.getByText(/Hosted job · Tripo/)).toBeTruthy();
+  });
+
+  it("shows a leftover job from a no-longer-supported provider as a readable failed state without crashing", () => {
+    const job = { id: "j", nodeId: "n", provider: "legacy-provider" as never, providerTaskId: "task-1", status: "failed" as const, progress: 0, error: { code: "unsupported", message: "This provider is no longer supported.", retryable: false } };
+    render(<Inspector {...base} node={node("generation")} provider="procedural" catalog={catalogAll(true)} hosted={{ ...hosted, configured: true, job }} />);
+    expect(screen.getByRole("status").textContent).toBeTruthy();
   });
 });
 

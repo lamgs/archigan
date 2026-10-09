@@ -1,17 +1,14 @@
 "use client";
 
 import type { Provider } from "@/lib/contracts";
-import { isHostedProvider, PICKER_ORDER, PROVIDER_META, providerCost, providerLabel, type ProviderCatalog } from "@/lib/provider-meta";
-
-/** Server env vars an operator must set to enable a hosted provider (names only; never values). */
-export const setupGuidance = (id: Provider) => {
-  const meta = PROVIDER_META[id];
-  return meta.enabledVar ? `Set ${meta.enabledVar}=true, ${meta.keyVar} and SIFT_ACCESS_CODE on the server to enable it.` : "";
-};
+import { isHostedProvider, PICKER_ORDER, providerCost, providerLabel, type ProviderCatalog } from "@/lib/provider-meta";
 
 type Props = { provider: Provider; catalog: ProviderCatalog | null; onProvider: (provider: Provider) => void };
 
-/** Provider choice: Local plus every hosted provider, with configured state, an "unverified" label, and an estimated cost. */
+/**
+ * Provider choice: one identical card per provider (name, then a single muted line with the estimated cost).
+ * Hosted providers carry a compact "Unverified" chip because no hosted behaviour has been tested with a real account.
+ */
 export function ProviderPicker({ provider, catalog, onProvider }: Props) {
   return (
     <fieldset className="provider-picker">
@@ -20,18 +17,18 @@ export function ProviderPicker({ provider, catalog, onProvider }: Props) {
         const hosted = isHostedProvider(id);
         const configured = hosted ? Boolean(catalog?.[id]?.configured) : true;
         const disabled = !configured && provider !== id;
-        const label = providerLabel(id, catalog ?? undefined);
+        const selected = provider === id;
         return (
-          <label className="radio provider-option" key={id} data-provider={id}>
-            <input type="radio" name="provider" checked={provider === id} disabled={disabled} onChange={() => onProvider(id)} />
-            {" "}{hosted ? `${label} (paid)` : label}{" "}
-            {hosted ? (
-              <small>
-                {configured ? "configured · unverified" : "unavailable — not configured on this server · unverified"}
-                <span className="provider-option__cost"> · Estimated cost per generation: {providerCost(id, catalog ?? undefined)} (estimate, not a quote)</span>
-                {!configured && <span className="provider-option__setup"> {setupGuidance(id)}</span>}
-              </small>
-            ) : <small>no account needed · free</small>}
+          <label className={`provider-option ${selected ? "is-selected" : ""} ${disabled ? "is-disabled" : ""}`} key={id} data-provider={id}>
+            <input type="radio" name="provider" checked={selected} disabled={disabled} onChange={() => onProvider(id)} />
+            <span className="provider-option__text">
+              <span className="provider-option__name">
+                <strong>{providerLabel(id, catalog ?? undefined)}</strong>
+                {hosted && <em className="chip chip--unverified">Unverified</em>}
+                {hosted && !configured && <em className="chip chip--muted">Not configured on this server</em>}
+              </span>
+              <small className="provider-option__desc">{providerCost(id, catalog ?? undefined)}</small>
+            </span>
           </label>
         );
       })}

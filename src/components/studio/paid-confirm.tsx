@@ -30,7 +30,7 @@ export function PaidConfirm({ providerLabel, costLabel, supportsCancel, prompt, 
         <h2 id="paid-title">Spend {providerLabel} credits?</h2>
         <div id="paid-body">
           <p>This sends your brief to <strong>{providerLabel}</strong>, a paid third-party service, and uses credits on the {providerLabel} account connected to this deployment. It cannot be undone, and {supportsCancel ? "a task can only be cancelled while it is still queued." : "a task cannot be cancelled once started; the app can only stop waiting."}</p>
-          <p className="modal__fine">Approximate cost per generation: {costLabel} (an estimate from public pricing, not a quote).</p>
+          <p className="modal__fine">Approximate cost per generation: {costLabel}.</p>
           <blockquote>{prompt}</blockquote>
           <p className="modal__fine">The result is a fixed mesh (not editable geometry). Hosted generation has not been verified against a live account yet.</p>
         </div>

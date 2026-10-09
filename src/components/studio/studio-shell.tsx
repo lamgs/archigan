@@ -8,8 +8,8 @@ import { DEFAULT_VIEWER_SETTINGS } from "@/lib/viewer";
 import { NODE_PORTS, validateConnection } from "@/lib/graph";
 import { copyFromSample, createBlankProject, EXAMPLE_PROMPTS, isBlankProject, NODE_ORDER, projectSignature, renameProject, validateProjectName } from "@/lib/projects";
 import { SAMPLE_BLURBS, sampleProjects } from "@/lib/samples";
-import { applyTaskUpdate, buildHostedArtifact, completeJob, failJob, isActiveJob, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
-import { isHostedProvider, providerCost, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
+import { applyTaskUpdate, buildHostedArtifact, completeJob, failIfRetiredProvider, failJob, isActiveJob, isUnknownProviderError, isHostedJob, markRateLimited, newHostedJob, nextPollDelayMs, timeoutIfStale, userCancel } from "@/lib/hosted";
+import { isHostedProvider, isSupportedProvider, providerCost, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
 import { cancelHostedTask, createHostedTask, downloadHostedModel, fetchHostedTask } from "@/lib/hosted-client";
 import { probeGpu, renderPng } from "@/lib/render-image";
 import { describeRender, parseRenderSettings, supportedResolutions, type GpuLimits, type RenderSettings } from "@/lib/render-settings";
@@ -20,9 +20,12 @@ import { addConnectedNode, addNode, branchFrom, commitVariations, connectNodes, 
 import { Dashboard } from "./dashboard";
 import { Inspector } from "./inspector";
 import { PaidConfirm } from "./paid-confirm";
+import { removeEdge, removeNode } from "./graph-edit";
+import { RemovableEdge } from "./removable-edge";
 import { StudioNode, type StudioFlowNode } from "./studio-node";
 
 const nodeTypes = { studio: StudioNode };
+const edgeTypes = { removable: RemovableEdge };
 const ModelPreview = dynamic(() => import("./model-preview").then((module) => module.ModelPreview), {
   ssr: false,
   loading: () => <aside className="preview-panel preview-panel--loading">Preparing 3D study…</aside>,
@@ -120,7 +123,12 @@ function Studio() {
     setNodes((current) => current.map((node) => (node.id === id ? { ...node, data: { ...node.data, params: { ...node.data.params, text: value } } } : node)));
   }, [setNodes, record]);
 
-  const buildProject = (base: Meta, g: FlowGraph, viewport: Viewport = base.viewport): SiftProjectV2 => ({ schemaVersion: 2, ...base, viewport, updatedAt: new Date().toISOString(), graph: g });
+  // The stored project may not contain jobs whose node was deleted (contracts: "Job references a missing node"). They stay in memory so Undo restores the node with its jobs; artifacts and revisions are always kept.
+  const buildProject = (base: Meta, g: FlowGraph, viewport: Viewport = base.viewport): SiftProjectV2 => {
+    const present = new Set(g.nodes.map((node) => node.id));
+    const jobs = Object.fromEntries(Object.entries(base.jobs).filter(([, job]) => present.has(job.nodeId)));
+    return { schemaVersion: 2, ...base, jobs, viewport, updatedAt: new Date().toISOString(), graph: g };
+  };
 
   const persist = async (base: Meta = meta, g: FlowGraph = graph) => {
     const named = validateProjectName(base.name);
@@ -301,9 +309,17 @@ function Studio() {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  // A task left over from a provider the product no longer offers cannot be polled: show it as failed instead of waiting forever.
+  const unsupportedActiveKey = Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job) && !isSupportedProvider(job.provider)).map((job) => job.id).join(",");
+  useEffect(() => {
+    if (!unsupportedActiveKey) return;
+    const now = new Date().toISOString();
+    unsupportedActiveKey.split(",").forEach((id) => patchJob(id, (job) => failIfRetiredProvider(job, now)));
+  }, [unsupportedActiveKey, patchJob]);
+
   const jobsRef = useRef(meta.jobs);
   useEffect(() => { jobsRef.current = meta.jobs; });
-  const activeJobKey = view === "studio" ? Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job)).map((job) => job.id).join(",") : "";
+  const activeJobKey = view === "studio" ? Object.values(meta.jobs).filter((job) => isHostedJob(job) && isActiveJob(job) && isSupportedProvider(job.provider)).map((job) => job.id).join(",") : "";
   useEffect(() => {
     const code = accessCode.trim();
     if (!activeJobKey || !code) return;
@@ -324,6 +340,7 @@ function Studio() {
         if (!status.ok) {
           const { error } = status;
           if (error.code === "rate-limited") { patchJob(jobId, (current) => markRateLimited(current, now)); delay = nextPollDelayMs(attempt, error.retryAfterSeconds ?? 10); }
+          else if (isUnknownProviderError(error)) return patchJob(jobId, (current) => failIfRetiredProvider(current, now));
           else if (!error.retryable) return patchJob(jobId, (current) => failJob(current, { code: error.code, message: error.message, retryable: false }, now));
         } else if (status.value.status === "completed") {
           const model = await downloadHostedModel(job.provider, job.providerTaskId, code);
@@ -337,6 +354,7 @@ function Studio() {
             setNotice("Hosted model downloaded and saved in this browser.");
             return;
           }
+          if (isUnknownProviderError(model.error)) return patchJob(jobId, (current) => failIfRetiredProvider(current, now));
           if (model.error.retryable && (ingestTries += 1) < 4) delay = 4000 * ingestTries;
           else return patchJob(jobId, (current) => failJob(current, { code: model.error.code, message: model.error.message, retryable: false }, now));
         } else patchJob(jobId, (current) => applyTaskUpdate(current, status.value, now));
@@ -521,6 +539,24 @@ function Studio() {
     record();
     setEdges(toFlowEdges(result.graph));
   };
+  /** Focus returns to the board after a removal, so keyboard users are not left on a button that no longer exists. */
+  const focusBoard = () => window.setTimeout(() => wrap.current?.focus(), 0);
+  const deleteNode = (id: string) => {
+    const result = removeNode(graph, id);
+    if (!result.ok) return setNotice(result.message);
+    record();
+    applyGraph(result.graph);
+    setNotice(`${NODE_LABELS[graph.nodes.find((node) => node.id === id)?.type ?? "prompt"]} node deleted with its connections. Undo brings it back.`);
+    focusBoard();
+  };
+  const deleteEdge = (id: string) => {
+    const result = removeEdge(graph, id);
+    if (!result.ok) return setNotice(result.message);
+    record();
+    applyGraph(result.graph);
+    setNotice("Connection removed. Undo brings it back.");
+    focusBoard();
+  };
   const isValid = (connection: Connection | Edge) => validateConnection(graph.nodes, graph.edges, { source: connection.source, sourcePort: connection.sourceHandle ?? "", target: connection.target, targetPort: connection.targetHandle ?? "" }).ok;
 
   const displayNodes = useMemo(() => nodes.map((node): StudioFlowNode => {
@@ -536,7 +572,8 @@ function Studio() {
   const flowEdges = useMemo(() => edges.map((edge) => {
     const type = graph.nodes.find((node) => node.id === edge.source)?.type;
     const kind = type ? NODE_PORTS[type].outputs.find((port) => port.id === edge.sourceHandle)?.kind : undefined;
-    return { ...edge, animated: results[edge.source]?.status === "ready", style: { stroke: (kind && PORT_COLORS[kind]) || "#8f2f24", strokeWidth: 1.8 } };
+    return { ...edge, type: "removable", data: { onRemove: deleteEdge }, animated: results[edge.source]?.status === "ready", style: { stroke: (kind && PORT_COLORS[kind]) || "#8f2f24", strokeWidth: 1.8 } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [edges, graph, results]);
 
   const loadNow = (project: SiftProjectV2) => {
@@ -648,8 +685,8 @@ function Studio() {
               <span>Add</span>
               {NODE_ORDER.map((type) => <button type="button" key={type} onClick={() => addFree(type)}>{NODE_LABELS[type]}</button>)}
             </div>
-            <div className="flow-wrap" ref={wrap}>
-              <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} onBeforeDelete={async (deletion) => { record(); return deletion; }} onNodeDragStart={() => record()} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} attributionPosition="bottom-left">
+            <div className="flow-wrap" ref={wrap} tabIndex={-1}>
+              <ReactFlow key={meta.id} nodes={displayNodes} edges={flowEdges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} deleteKeyCode={["Backspace", "Delete"]} onBeforeDelete={async (deletion) => { record(); return deletion; }} onNodeDragStart={() => record()} isValidConnection={isValid} onConnectEnd={(_, state) => { if (state.toNode && !state.isValid) setNotice("Those ports are not compatible, or the connection would create a cycle."); }} nodeTypes={nodeTypes} edgeTypes={edgeTypes} defaultViewport={meta.viewport} onMoveEnd={(_, viewport) => setMeta((current) => ({ ...current, viewport }))} minZoom={0.3} maxZoom={1.5} attributionPosition="bottom-left">
                 <Background variant={BackgroundVariant.Dots} gap={22} size={1.1} color="#b9b2a5" />
                 <Controls showInteractive={false} />
                 <MiniMap pannable zoomable nodeColor="#8f2f24" maskColor="rgba(236,232,223,.72)" />
@@ -678,6 +715,7 @@ function Studio() {
               onAccessCode={setAccessCode}
               onCancelJob={() => void cancelJob()}
               onDownloadHosted={downloadHosted}
+              onDeleteNode={() => selectedId && deleteNode(selectedId)}
             />
             {blank && <p className="canvas-hint">Start here: write a brief in the <strong>Prompt</strong> node (or pick an example below), then press <strong>Run</strong> on the <strong>Generation</strong> node.</p>}
             {blank && <div className="chip-row chip-row--canvas" aria-label="Example briefs">{EXAMPLE_PROMPTS.map((example) => <button type="button" key={example.label} onClick={() => applyExample(example)}>{example.label}</button>)}</div>}

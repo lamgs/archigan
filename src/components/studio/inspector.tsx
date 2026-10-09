@@ -7,8 +7,8 @@ import { LIMITS, type SpecEdit } from "@/lib/spec-edit";
 import { CAMERA_PRESETS, MODE_LABELS, PRESET_LABELS, VIEW_MODES } from "@/lib/viewer";
 import type { GenerationJob } from "@/lib/contracts";
 import { describeJob, isActiveJob } from "@/lib/hosted";
-import { isHostedProvider, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
-import { ProviderPicker, setupGuidance } from "./provider-picker";
+import { isHostedProvider, isSupportedProvider, providerLabel, providerSupportsCancel, type ProviderCatalog } from "@/lib/provider-meta";
+import { ProviderPicker } from "./provider-picker";
 import { INTERPRETER_HELP } from "@/lib/typologies";
 import { NODE_LABELS, type LineageEntry } from "@/lib/workflow";
 
@@ -164,8 +164,8 @@ function HostedSection({ provider, catalog, state, onAccessCode, onCancel, onDow
   const jobCanCancel = job ? providerSupportsCancel(job.provider, catalog ?? undefined) : false;
   return (
     <fieldset>
-      <legend>Hosted job · {label} (unverified)</legend>
-      {!state.configured && <p className="inspector__hint">Hosted generation with {label} is disabled on this deployment. {setupGuidance(provider)} The local procedural provider keeps working.</p>}
+      <legend>Hosted job · {label}</legend>
+      {!state.configured && <p className="inspector__hint">Hosted generation is not available on this server. The local provider keeps working.</p>}
       {state.configured && (
         <label className="field field--stack"><span>Access code (memory only)</span><input type="password" autoComplete="off" value={state.accessCode} onChange={(event) => onAccessCode(event.target.value)} /></label>
       )}
@@ -208,9 +208,10 @@ type Props = {
   onAccessCode: (value: string) => void;
   onCancelJob: () => void;
   onDownloadHosted: () => void;
+  onDeleteNode: () => void;
 };
 
-export function Inspector({ node, spec, blockedMessage, provider, catalog, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender, hosted, onAccessCode, onCancelJob, onDownloadHosted }: Props) {
+export function Inspector({ node, spec, blockedMessage, provider, catalog, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender, hosted, onAccessCode, onCancelJob, onDownloadHosted, onDeleteNode }: Props) {
   const editable = node && (node.type === "generation" || node.type === "variation") && spec;
   return (
     <aside className={`inspector ${collapsed ? "is-collapsed" : ""}`} aria-label="Node inspector">
@@ -226,7 +227,7 @@ export function Inspector({ node, spec, blockedMessage, provider, catalog, revis
           {node?.type === "generation" && (
             <ProviderPicker provider={provider} catalog={catalog} onProvider={onProvider} />
           )}
-          {node?.type === "generation" && (isHostedProvider(provider) || (hosted.job && isActiveJob(hosted.job))) && <HostedSection provider={isHostedProvider(provider) ? provider : (hosted.job?.provider ?? provider)} catalog={catalog} state={hosted} onAccessCode={onAccessCode} onCancel={onCancelJob} onDownload={onDownloadHosted} />}
+          {node?.type === "generation" && (isHostedProvider(provider) || (hosted.job && (isActiveJob(hosted.job) || !isSupportedProvider(hosted.job.provider)))) && <HostedSection provider={isHostedProvider(provider) ? provider : (hosted.job?.provider ?? provider)} catalog={catalog} state={hosted} onAccessCode={onAccessCode} onCancel={onCancelJob} onDownload={onDownloadHosted} />}
           {editable && spec && (
             <>
               <p className="inspector__hint">{node.type === "generation" ? `Each change creates a new revision; earlier versions are kept (${revisionCount} so far).` : "Changes are stored on this variation; the source model stays untouched."}</p>
@@ -253,6 +254,13 @@ export function Inspector({ node, spec, blockedMessage, provider, catalog, revis
           {node && (node.type === "generation" || node.type === "variation") && !spec && <p className="inspector__hint">{blockedMessage || "Run the generation to unlock geometry controls."}</p>}
           {node?.type === "model" && <p className="inspector__hint">This node displays the upstream model. Edit geometry on its Generation or Variation node; camera presets and display modes are in the viewer toolbar.</p>}
           {node?.type === "render" && <RenderPanel state={render} canRender={canRender} onSetting={onRenderSetting} onRender={onRender} />}
+          {node && (
+            <fieldset className="inspector__danger">
+              <legend>Node</legend>
+              <button type="button" className="ghost-button danger-button" onClick={onDeleteNode} title="Delete node and its connections (Delete). Undo brings it back.">Delete node</button>
+              <p className="inspector__hint">Removes this node and its connections. Earlier versions stay in history, and Undo restores it.</p>
+            </fieldset>
+          )}
         </div>
       )}
     </aside>
