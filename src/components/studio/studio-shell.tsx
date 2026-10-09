@@ -33,7 +33,7 @@ const ModelPreview = dynamic(() => import("./model-preview").then((module) => mo
 
 /** Fit options that keep nodes clear of the floating chrome (top pill, left toolbar, bottom pills). */
 const FIT_DESKTOP = { padding: { top: "88px", right: "32px", bottom: "72px", left: "84px" }, maxZoom: 1 } as const;
-const FIT_NARROW = { padding: { top: "132px", right: "16px", bottom: "72px", left: "16px" }, maxZoom: 1 } as const;
+const FIT_NARROW = { padding: { top: "160px", right: "16px", bottom: "72px", left: "16px" }, maxZoom: 1 } as const;
 const NARROW_QUERY = "(max-width: 900px)";
 const subscribeNarrow = (notify: () => void) => { const query = window.matchMedia(NARROW_QUERY); query.addEventListener("change", notify); return () => query.removeEventListener("change", notify); };
 /** True on tablet/phone widths, where the inspector docks under the board instead of beside it. */
@@ -708,6 +708,7 @@ function Studio() {
       ) : (
         <section className="workspace" id="workspace">
           <section className="canvas-panel" aria-label="Generation workflow">
+            <h1 className="visually-hidden">Shape the idea</h1>
             <div className="project-pill">
               <a className="brand brand-mark" href="#workspace" aria-label="Sift home — all projects" title="Sift — all projects" onClick={(event) => { event.preventDefault(); void goToDashboard(); }}>S</a>
               <input className="project-pill__name" aria-label="Project name" value={meta.name} onChange={(event) => setMeta((current) => ({ ...current, name: event.target.value }))} />
