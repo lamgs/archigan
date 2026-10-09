@@ -129,7 +129,7 @@ test("4. two child revisions stay visible with lineage after reload", async ({ p
   // Branch A: follow-up prompt.
   await selectNode(page, "Variation", 0);
   await page.locator('article[aria-label="Variation node"] >> nth=0 >> textarea').fill("glass facade, crown roof");
-  await page.locator(".save-state").click();
+  await page.locator('article[aria-label="Variation node"] textarea').first().blur(); // commit the follow-up text
   await savedBadge(page);
 
   const snapshot = async () => {

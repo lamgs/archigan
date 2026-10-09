@@ -214,10 +214,10 @@ type Props = {
 export function Inspector({ node, spec, blockedMessage, provider, catalog, revisionCount, versions, onRestore, collapsed, error, onToggle, onProvider, onEdit, onClearEdits, render, canRender, onRenderSetting, onRender, hosted, onAccessCode, onCancelJob, onDownloadHosted, onDeleteNode }: Props) {
   const editable = node && (node.type === "generation" || node.type === "variation") && spec;
   return (
-    <aside className={`inspector ${collapsed ? "is-collapsed" : ""}`} aria-label="Node inspector">
+    <aside className={`inspector ${collapsed ? "is-collapsed" : "is-open"}`} aria-label="Node inspector">
       <header>
-        <div><span className="section-kicker">Inspector</span><h2>{node ? NODE_LABELS[node.type] : "Nothing selected"}</h2></div>
-        {(node || !collapsed) && <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? "Expand inspector" : "Collapse inspector"}>{collapsed ? "‹" : "›"}</button>}
+        <div><span className="section-kicker">Inspector</span><h2>{node ? NODE_LABELS[node.type] : "Nothing selected"}</h2>{!node && <p className="inspector__empty">Select a node to edit it.</p>}</div>
+        {(node || !collapsed) && <button type="button" onClick={onToggle} aria-expanded={!collapsed} aria-label={collapsed ? "Expand inspector" : "Collapse inspector"}><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={collapsed ? "M4 6l4 4 4-4" : "M4 10l4-4 4 4"} /></svg></button>}
       </header>
       {!collapsed && (
         <div className="inspector__body">

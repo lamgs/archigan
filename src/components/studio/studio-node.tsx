@@ -11,6 +11,7 @@ export type StudioNodeData = {
   artifactId?: string;
   status: "ready" | "stale" | "pending" | "blocked";
   message: string;
+  busy?: boolean;
   summary: string;
   nextTypes: DesignNodeType[];
   onText: (id: string, value: string) => void;
@@ -33,45 +34,59 @@ const GLYPHS: Record<DesignNodeType, React.ReactNode> = {
   render: <path d="M2 5h2.5l1-1.5h5L11.5 5H14v8H2zM8 11.2a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8z" />,
 };
 
+/** Small inline glyph for a node type; shared by the cards and the vertical add toolbar. */
+export function NodeGlyph({ type }: { type: DesignNodeType }) {
+  return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{GLYPHS[type]}</svg>;
+}
+
 export function StudioNode({ id, data, selected }: NodeProps<StudioFlowNode>) {
   const ports = NODE_PORTS[data.type];
   const editable = data.type === "prompt" || data.type === "variation";
+  const showRun = data.type === "generation";
+  const showRender = data.type === "render" && data.status !== "blocked";
+  const showBranch = Boolean(selected) && (data.type === "generation" || data.type === "variation") && data.status !== "blocked";
   const text = typeof data.params.text === "string" ? data.params.text : "";
   return (
-    <article className={`studio-node studio-node--${data.type} ${selected ? "is-selected" : ""}`} data-status={data.status} aria-label={`${NODE_LABELS[data.type]} node`}>
+    <article className={`studio-node studio-node--${data.type} ${selected ? "is-selected" : ""}`} data-status={data.status} data-busy={data.busy ? "true" : undefined} aria-label={`${NODE_LABELS[data.type]} node`}>
       {ports.inputs.map((port, index) => (
         <Handle key={port.id} id={port.id} type="target" position={Position.Left} className={`port port--${port.kind}`} title={`Input: ${port.kind}`} style={{ top: `${50 + index * 18}%` }} />
       ))}
-      <div className="studio-node__topline">
-        <i className="studio-node__glyph" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{GLYPHS[data.type]}</svg></i>
+      <header className="studio-node__topline">
+        <i className="studio-node__glyph" aria-hidden="true"><NodeGlyph type={data.type} /></i>
         <span>{EYEBROW[data.type]}</span>
         <em className={`status status--${data.status}`} title={data.message}>{STATUS_LABEL[data.status]}</em>
+      </header>
+      <div className="studio-node__body">
+        <h2>{NODE_LABELS[data.type]}{typeof data.params.label === "string" && data.params.label ? <small className="node-label"> · {data.params.label}</small> : null}</h2>
+        {editable ? (
+          <textarea
+            className="nodrag nowheel"
+            aria-label={data.type === "prompt" ? "Design brief" : "Refinement"}
+            value={text}
+            rows={3}
+            maxLength={data.type === "prompt" ? 800 : 400}
+            placeholder={data.type === "prompt" ? "Describe the building, material, and organization…" : "Optional: terraces, twist, glass…"}
+            onChange={(event) => data.onText(id, event.target.value)}
+            onBlur={data.onCommit}
+          />
+        ) : (
+          <p>{data.status === "blocked" || data.status === "pending" ? data.message : data.summary}</p>
+        )}
+        {(showRun || showRender || showBranch) && (
+          <div className="studio-node__actions">
+            {showRun && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Run again" : "Run"}</button>}
+            {showRender && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Render again" : "Render"}</button>}
+            {showBranch && <button type="button" className="nodrag node-branch" onClick={() => data.onBranch(id)}>Branch ⑂</button>}
+          </div>
+        )}
+        {data.status === "stale" && <p className="node-note">The upstream prompt changed — run again to update.</p>}
+        {selected && data.nextTypes.length > 0 && (
+          <div className="node-next nodrag" role="group" aria-label="Add next node">
+            <span>Add next</span>
+            {data.nextTypes.map((type) => <button type="button" key={type} onClick={() => data.onAdd(id, type)}>{NODE_LABELS[type]}</button>)}
+          </div>
+        )}
       </div>
-      <h2>{NODE_LABELS[data.type]}{typeof data.params.label === "string" && data.params.label ? <small className="node-label"> · {data.params.label}</small> : null}</h2>
-      {editable ? (
-        <textarea
-          className="nodrag nowheel"
-          aria-label={data.type === "prompt" ? "Design brief" : "Refinement"}
-          value={text}
-          rows={3}
-          maxLength={data.type === "prompt" ? 800 : 400}
-          placeholder={data.type === "prompt" ? "Describe the building, material, and organization…" : "Optional: terraces, twist, glass…"}
-          onChange={(event) => data.onText(id, event.target.value)}
-          onBlur={data.onCommit}
-        />
-      ) : (
-        <p>{data.status === "blocked" || data.status === "pending" ? data.message : data.summary}</p>
-      )}
-      {data.type === "generation" && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Run again" : "Run"}</button>}
-      {data.type === "render" && data.status !== "blocked" && <button type="button" className="nodrag node-run" onClick={() => data.onRun(id)}>{data.artifactId ? "Render again" : "Render"}</button>}
-      {selected && (data.type === "generation" || data.type === "variation") && data.status !== "blocked" && <button type="button" className="nodrag node-branch" onClick={() => data.onBranch(id)}>Branch ⑂</button>}
-      {data.status === "stale" && <p className="node-note">The upstream prompt changed — run again to update.</p>}
-      {selected && data.nextTypes.length > 0 && (
-        <div className="node-next nodrag" role="group" aria-label="Add next node">
-          <span>Add next</span>
-          {data.nextTypes.map((type) => <button type="button" key={type} onClick={() => data.onAdd(id, type)}>{NODE_LABELS[type]}</button>)}
-        </div>
-      )}
       {ports.outputs.map((port, index) => (
         <Handle key={port.id} id={port.id} type="source" position={Position.Right} className={`port port--${port.kind}`} title={`Output: ${port.kind}`} style={{ top: `${50 + index * 18}%` }} />
       ))}
