@@ -41,10 +41,11 @@ SIFT_ACCESS_CODE=<shared secret users type before any paid request; anyone with 
 SIFT_DAILY_LIMIT=20        # optional, per server instance, counted across ALL providers
 MESHY_ENABLED=true         MESHY_API_KEY=<server-only secret>
 TRIPO_ENABLED=true         TRIPO_API_KEY=<server-only secret>
-HUNYUAN_ENABLED=true       FAL_KEY=<server-only secret>     # enables Hunyuan3D Rapid and Pro
+HUNYUAN_ENABLED=true       FAL_KEY=<server-only secret>     # enables Hunyuan3D Rapid and Pro (fal.ai)
+TENCENT_HY3D_ENABLED=true  TENCENT_SECRET_ID=<id> TENCENT_SECRET_KEY=<server-only secret>   # HY 3D Rapid and Pro direct from Tencent Cloud
 ```
 
-`MESHY_ACCESS_CODE` / `MESHY_DAILY_LIMIT` remain accepted as fallbacks. Routes: `POST /api/generate` (body `provider`, `confirmSpend: true`; header `x-sift-access-code`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (status / cancel), `GET /api/generate/{taskId}/model?provider=<id>` (GLB ingest; only HTTPS hosts on the provider's allowlist are fetched, redirects refused, 100 MB cap, `glTF` magic check), `GET /api/providers` (secret-free catalog). Provider ids: `meshy`, `tripo`, `hunyuan3d-rapid`, `hunyuan3d-pro`.
+`MESHY_ACCESS_CODE` / `MESHY_DAILY_LIMIT` remain accepted as fallbacks. Routes: `POST /api/generate` (body `provider`, `confirmSpend: true`; header `x-sift-access-code`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (status / cancel), `GET /api/generate/{taskId}/model?provider=<id>` (GLB ingest; only HTTPS hosts on the provider's allowlist are fetched, redirects refused, 100 MB cap, `glTF` magic check), `GET /api/providers` (secret-free catalog). Provider ids: `meshy`, `tripo`, `hunyuan3d-rapid`, `hunyuan3d-pro`, `tencent-rapid`, `tencent-pro`.
 
 ### Setting up (no vendor calls)
 
@@ -57,9 +58,9 @@ HUNYUAN_ENABLED=true       FAL_KEY=<server-only secret>     # enables Hunyuan3D 
 **Status: ALL UNVERIFIED.** Only mocked documented-contract tests exist; vendor docs for fal.ai and Tripo (and Meshy) were unreachable when the adapters were written. For each provider, use a throwaway low-credit key in a trusted environment and check off each item, then update `STATUS.md` (remove the blocker) and flip `verified` only if all pass:
 
 1. Create task: `POST /api/generate` returns 202 with a task id; the vendor dashboard shows the task.
-2. Status: `GET /api/generate/{id}?provider=…` transitions queued → running → completed; compare the raw vendor JSON with the adapter's normalizer. **Unconfirmed names:** Meshy `model_urls.glb`, `task_error.message`, `expires_at`; Tripo base URL/path (v2 `/task` vs v3 per-capability endpoints), body fields, `output.pbr_model|model|model_url`, envelope error codes; fal endpoint ids, the app-id form of status/result/cancel URLs, `model_glb` / `model_urls.glb`, Rapid `enable_pbr`/`enable_geometry`, Pro `face_count`, prompt limits, the 403 balance wording, and the signed-asset hosts (`fal.media`, `tripo3d.com|ai`).
+2. Status: `GET /api/generate/{id}?provider=…` transitions queued → running → completed; compare the raw vendor JSON with the adapter's normalizer. **Unconfirmed names:** Tencent (service `ai3d` 2025-05-13 on `ai3d.intl.tencentcloudapi.com`, region `ap-guangzhou`, actions `SubmitHunyuanTo3D{Rapid,Pro}Job` / `QueryHunyuanTo3D{Rapid,Pro}Job`, TC3-HMAC-SHA256 signing, `Response.Error.Code` families, `JobId` format vs the app's task-id pattern, result hosts `myqcloud.com`/`tencentcos.cn|com`, whether Rapid accepts English prompts — the SDK says Pro prompts are meant to be Chinese); Tripo now targets **v3** (`openapi.tripo3d.ai/v3`, `POST /generation/text-to-model` with `model`, `GET /tasks/{id}`, `output.model_url`; results expire ≈5 min after success; no cancel); Meshy `model_urls.glb`, `task_error.message`, `expires_at`; Tripo base URL/path (v2 `/task` vs v3 per-capability endpoints), body fields, `output.pbr_model|model|model_url`, envelope error codes; fal endpoint ids, the app-id form of status/result/cancel URLs, `model_glb` / `model_urls.glb`, Rapid `enable_pbr`/`enable_geometry`, Pro `face_count`, prompt limits, the 403 balance wording, and the signed-asset hosts (`fal.media`, `tripo3d.com|ai`).
 3. Ingest: `/model` returns a GLB that opens in the viewer and downloads (fal Rapid may return OBJ — the app rejects non-GLB).
-4. Cancel: Meshy DELETE on a queued task succeeds (409 when running); fal cancel via `PUT …/cancel`; Tripo has no known cancel (the app only stops waiting).
+4. Cancel: Meshy DELETE on a queued task succeeds (409 when running); fal cancel via `PUT …/cancel`; Tripo and Tencent have no known cancel (the app only stops waiting).
 5. Failure paths: bad key → `auth`; empty credits → `insufficient-credits`; rapid requests → 429 handling.
 6. Reload mid-task: the job resumes after re-entering the access code.
 7. Record the real per-generation price; correct the approximate cost labels in `src/lib/providers/*.ts` and `src/lib/provider-meta.ts` (Tripo's is currently "not confirmed").

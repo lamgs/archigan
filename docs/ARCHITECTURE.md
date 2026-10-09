@@ -47,7 +47,7 @@ type SiftProjectV2 = {
   artifacts: Record<string, Artifact>;
   jobs: Record<string, GenerationJob>;
   revisions: Record<string, DesignRevision>;
-  settings: { provider: "procedural" | "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro"; viewer?: ViewerSettings };
+  settings: { provider: "procedural" | "meshy" | "tripo" | "hunyuan3d-rapid" | "hunyuan3d-pro" | "tencent-rapid" | "tencent-pro"; viewer?: ViewerSettings };
 };
 ```
 
@@ -70,11 +70,11 @@ Node types: `prompt`, `generation`, `variation`, `model`, `render`. Ports carry 
 ## Generation contract
 
 - `procedural`: runs in the browser (`runGeneration`); no network.
-- Hosted providers (optional, all **unverified live**): `meshy`, `tripo`, `hunyuan3d-rapid`, `hunyuan3d-pro` (fal.ai queue), each implementing `HostedProvider` (`create` / `status` / `cancel`, plus label, approximate cost label, `supportsCancel`, asset-host allowlist, size cap, `config(env)`). A provider is configured only if its own flag + key and the shared `SIFT_ACCESS_CODE` (fallback `MESHY_ACCESS_CODE`) are set. Routes: `POST /api/generate` (header `x-sift-access-code`; body `provider`, `confirmSpend: true`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (normalized status / cancel where supported — Tripo has no known cancel), `GET /api/generate/{taskId}/model?provider=<id>` (fresh task lookup, host-allowlisted, size-capped GLB download), `GET /api/providers` (secret-free catalog). The browser polls with backoff using each job's own provider, resumes after reload (re-entering the access code), and stores the GLB locally rather than relying on expiring signed URLs. See ADR-016/017.
+- Hosted providers (optional, all **unverified live**): `meshy`, `tripo` (v3), `hunyuan3d-rapid`, `hunyuan3d-pro` (fal.ai queue), `tencent-rapid`, `tencent-pro` (Tencent Cloud `ai3d`, TC3-signed, no SDK), each implementing `HostedProvider` (`create` / `status` / `cancel`, plus label, approximate cost label, `supportsCancel`, asset-host allowlist, size cap, `config(env)`). A provider is configured only if its own flag + key and the shared `SIFT_ACCESS_CODE` (fallback `MESHY_ACCESS_CODE`) are set. Routes: `POST /api/generate` (header `x-sift-access-code`; body `provider`, `confirmSpend: true`), `GET|DELETE /api/generate/{taskId}?provider=<id>` (normalized status / cancel where supported — Tripo has no known cancel), `GET /api/generate/{taskId}/model?provider=<id>` (fresh task lookup, host-allowlisted, size-capped GLB download), `GET /api/providers` (secret-free catalog). The browser polls with backoff using each job's own provider, resumes after reload (re-entering the access code), and stores the GLB locally rather than relying on expiring signed URLs. See ADR-016/017.
 
 ## Security and privacy
 
-- Provider keys (`MESHY_API_KEY`, `TRIPO_API_KEY`, `FAL_KEY`) are server-only; it is never serialized, logged, returned, or stored client-side. Hosted calls require the access code (constant-time compare), explicit confirmation, and pass per-IP/daily limits shared across providers (per server instance).
+- Provider keys (`MESHY_API_KEY`, `TRIPO_API_KEY`, `FAL_KEY`, `TENCENT_SECRET_ID`/`TENCENT_SECRET_KEY`) are server-only; it is never serialized, logged, returned, or stored client-side. Hosted calls require the access code (constant-time compare), explicit confirmation, and pass per-IP/daily limits shared across providers (per server instance).
 - Signed asset URLs never reach the browser; only HTTPS URLs on each provider's allowlisted hosts are fetched server-side (redirects refused).
 - Prompts and models are user content; there is no analytics capture. Project data stays in the visitor's browser.
 

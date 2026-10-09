@@ -42,11 +42,12 @@ Browser (Next.js App Router client)
 
 ## Credentials (optional hosted generation)
 
-Hosted generation is **off by default** and fails closed, per provider. A provider is enabled only if its own flag **and** key are set **and** a shared access code is set (copy `.env.example` to `.env.local`):
+Hosted generation is **off by default** and fails closed, per provider. A provider is enabled only if its own flag **and** key(s) are set **and** a shared access code is set (copy `.env.example` to `.env.local`):
 
 | Provider | Flag | Key |
 | --- | --- | --- |
 | Hunyuan3D via fal.ai (Rapid and Pro) | `HUNYUAN_ENABLED=true` | `FAL_KEY` |
+| HY 3D via Tencent Cloud directly (Rapid and Pro) | `TENCENT_HY3D_ENABLED=true` | `TENCENT_SECRET_ID` + `TENCENT_SECRET_KEY` |
 | Tripo | `TRIPO_ENABLED=true` | `TRIPO_API_KEY` |
 | Meshy | `MESHY_ENABLED=true` | `MESHY_API_KEY` |
 
@@ -55,7 +56,7 @@ Hosted generation is **off by default** and fails closed, per provider. A provid
 | `SIFT_ACCESS_CODE` | Secret users must type before any paid request (`MESHY_ACCESS_CODE` still works as a fallback). Anyone who has it can spend credits on every enabled provider |
 | `SIFT_DAILY_LIMIT` | Optional per-instance daily cap, counted across all providers (default 20; `MESHY_DAILY_LIMIT` fallback) |
 
-Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All three hosted integrations are unverified:** they were written from vendor documentation summaries (the fal.ai and Tripo docs were unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
+Keys are server-only (never use a `NEXT_PUBLIC_` prefix). Users pick a provider in the Generation inspector and confirm each paid request in a dialog that names the selected provider; costs shown are approximate estimates. **All hosted integrations are unverified:** they were written from SDK sources and documentation summaries (the vendor doc sites were unreachable) and exercised only against mocks, never a live account — see [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for the smoke test. Hosted results are fixed meshes — viewable and downloadable, not editable. Local procedural generation needs none of this.
 
 ## Tests
 
