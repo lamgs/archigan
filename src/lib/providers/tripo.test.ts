@@ -30,6 +30,38 @@ describe("config", () => {
   });
 });
 
+describe("architectural steering", () => {
+  const sent = async (prompt: string, refinement = "") => {
+    const f = vi.fn(async (..._a: unknown[]) => json({ code: 0, data: { task_id: ID } }));
+    await tripoProvider.create(prompt, refinement, asFetch(f));
+    return JSON.parse(String((f.mock.calls[0] as [string, RequestInit])[1].body));
+  };
+  it("suppresses vernacular looks but never fights an explicit request", async () => {
+    expect((await sent("A wooden cabin")).negative_prompt).toMatch(/vernacular.*gothic.*rustic/);
+    const rustic = (await sent("A rustic cabin")).negative_prompt as string;
+    expect(rustic).not.toMatch(/rustic/);
+    expect(rustic).toMatch(/gothic/);
+  });
+  it("keeps the whole brief and stays within the prompt limit for the longest briefs", async () => {
+    const long = `${"A long wooden cabin brief. ".repeat(30)}`.trim();
+    const body = await sent(long, "with a cantilevered terrace");
+    expect(body.prompt.length).toBeLessThanOrEqual(1024);
+    expect(body.prompt.startsWith("A long wooden cabin brief.")).toBe(true);
+  });
+  it("retries once without the negative prompt if Tripo rejects the field, and fails if that is rejected too", async () => {
+    const f = vi.fn(async (..._a: unknown[]) => (f.mock.calls.length === 1 ? json({ message: "bad field" }, { status: 400 }) : json({ code: 0, data: { task_id: ID } })));
+    await expect(tripoProvider.create("A wooden cabin", "", asFetch(f))).resolves.toBe(ID);
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(String((f.mock.calls[1] as [string, RequestInit])[1].body))).not.toHaveProperty("negative_prompt");
+    const always = vi.fn(async (..._a: unknown[]) => json({ message: "bad" }, { status: 400 }));
+    await expect(tripoProvider.create("A wooden cabin", "", asFetch(always))).rejects.toMatchObject({ code: "rejected" });
+    expect(always).toHaveBeenCalledTimes(2);
+    const auth = vi.fn(async (..._a: unknown[]) => new Response("no", { status: 401 }));
+    await expect(tripoProvider.create("A wooden cabin", "", asFetch(auth))).rejects.toMatchObject({ code: "auth" });
+    expect(auth).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("create", () => {
   it("POSTs v3 /generation/text-to-model with bearer key and returns the task id", async () => {
     const f = vi.fn(async (..._a: unknown[]) => json({ code: 0, data: { task_id: ID } }));
@@ -41,7 +73,9 @@ describe("create", () => {
     const body = JSON.parse(String(init.body));
     expect(body).toMatchObject({ model: TRIPO_MODEL, texture: false, pbr: false });
     expect(body).not.toHaveProperty("type");
-    expect(body.prompt).toMatch(/a tower with terraces/);
+    expect(body.prompt).toMatch(/^A tower with terraces\./);
+    expect(body.prompt).toMatch(/award-winning/);
+    expect(body.negative_prompt).toMatch(/vernacular/);
     expect(body.prompt.length).toBeLessThanOrEqual(1024);
   });
   it("refuses without a key and never calls the network", async () => {

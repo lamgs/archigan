@@ -2,6 +2,12 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-30 — Claude — architectural steering for Tripo prompts
+
+- Added `src/lib/providers/architectural-style.ts` (ADR-020): brief-first prompt with contemporary-architecture clauses + a `negative_prompt` against vernacular/gothic/toy looks (terms the brief uses are exempt); retry once without `negative_prompt` if Tripo rejects it. Removed the old `composeArchitecturalPrompt` from `massing.ts`.
+- Checks: lint, tsc, unit tests; four mutation checks caught. **Unverified:** whether it improves real Tripo output, and whether v3 accepts `negative_prompt`. Results are still untextured (`texture:false`) — an owner cost decision.
+- Next: run the same brief before/after on production, tune `STYLE_CLAUSES` / `NEGATIVE_TERMS`; consider `texture: true`.
+
 ## 2026-10-09 — Claude — Tripo-only, node/connector removal, UI redesign, bloat pass
 
 - **Providers (ADR-018):** Meshy, Hunyuan3D (fal) and Tencent adapters, env vars and docs removed; Tripo is the only hosted provider (`TRIPO_ENABLED`, `TRIPO_API_KEY`, `SIFT_ACCESS_CODE`, `SIFT_DAILY_LIMIT`). Projects saved with a removed provider still open: `settings.provider` is coerced to Local on load, jobs keep their raw provider and fail with a readable message. The provider-neutral interface/registry stays (small).
