@@ -7,7 +7,7 @@ Append newest entries first. Keep facts in `STATUS.md`; use this log for what ch
 - Removed `lineageOf` (dead in production; only a test used it) and its assertion; added `@eslint/js` as an explicit devDependency (eslint config imports it); regenerated `docs/evidence/` from the current UI (`E2E_EVIDENCE=1`) and deleted the two stale Meshy-era screenshots (`09-hosted-model.png`, `09-paid-confirmation.png`; replaced by `*-tripo` versions).
 - Audit method: scripted export-usage scan (no exports are fully unused; 28 are test-only — legitimate seams such as fixtures, `toLegacyProject`, `resetSpendLimiterForTests`), `tsc --noUnusedLocals/--noUnusedParameters` clean, dependency and CSS-class scans (only peer/type packages and dynamic class names flagged — false positives), no commented-out code or TODOs.
 - Deliberately not done: removing the `export` keyword from ~80 symbols used only inside their own file (churn, no behavior gain); the legacy PyTorch files and `results/` (owner decision still pending — AGENTS.md forbids silent deletion).
-- Checks: tsc, eslint, 258 unit tests, 33 Playwright tests, `npm audit` clean.
+- Checks: tsc, eslint, 258 unit tests, 33 Playwright tests. `npm audit --omit=dev`: 0 vulnerabilities; the full audit shows one **moderate dev-only** advisory (minimatch DoS, GHSA-g3hv-75wg-m249) reached through ESLint 9; its only offered fix is a breaking downgrade to eslint@4, so it is deliberately not applied — revisit when ESLint ships a patched minimatch.
 
 ## 2026-10-30 — Claude — architectural steering for Tripo prompts
 
