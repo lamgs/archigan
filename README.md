@@ -86,7 +86,7 @@ Project coordination for contributors and AI agents lives in [`AGENTS.md`](./AGE
 
 ## Legacy research prototype
 
-The original repository was a PyTorch implementation of an early voxel 3D-GAN. Its Python files, notebook, and sample results are preserved for provenance but are not dependencies of Sift, require old tooling and proprietary data, and are not part of the supported product.
+The original repository was a PyTorch implementation of an early voxel 3D-GAN. Its Python files, notebook, and sample results are preserved in [`legacy/`](./legacy) for provenance but are not dependencies of Sift, require old tooling and proprietary data, and are not part of the supported product.
 
 <details>
 <summary>Original ArchiGAN notes</summary>
@@ -115,7 +115,7 @@ The original repository was a PyTorch implementation of an early voxel 3D-GAN. I
 * Data was proprietary, and needs to be placed in a folder called `volumetric_data`.
 
 #### Training
-* Then `cd src`, simply run `python main.py` on GPU or CPU. Of course, you need a GPU for training until getting good results. I used one GeForce GTX 1070 in my experiments on 3D models with resolution of 32x32x32. The maximum number of channels of feature map is 256. Because of these, the results may be inconsistent with the paper. You may need a stronger one for higher resolution one 64x64x64 and 512 feature maps. 
+* Then `cd legacy`, simply run `python main.py` on GPU or CPU. Of course, you need a GPU for training until getting good results. I used one GeForce GTX 1070 in my experiments on 3D models with resolution of 32x32x32. The maximum number of channels of feature map is 256. Because of these, the results may be inconsistent with the paper. You may need a stronger one for higher resolution one 64x64x64 and 512 feature maps. 
 
 * Other arguments could be used, for example, `python main.py --logs=<SOMETHING_YOU_WANT_TO_LOG>` would start the tensorboardX for logging to `outputs` folder. For local debugging, you can run `python main.py --local_test=True`.
 

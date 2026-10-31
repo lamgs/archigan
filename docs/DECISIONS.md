@@ -132,3 +132,9 @@ The owner chose hosted AI generation with three providers: **Hunyuan3D (via fal.
 **Status:** accepted, 2026-10-30
 
 First real Tripo output was not architectural (vernacular/storybook buildings for "wooden cabin"). Text-to-3D models cannot be pointed at a database of awarded projects, so `src/lib/providers/architectural-style.ts` steers with wording only: the user's brief comes first (case preserved), then priority-ordered clauses describing contemporary, award-published, minimalist architecture (as many as fit Tripo's 1024-character limit), plus a `negative_prompt` suppressing vernacular, gothic, ornamental, toy-like and cluttered looks. Negative terms the brief itself uses are dropped so explicit requests are honoured. Because `negative_prompt` is documented only in secondary sources, a `rejected` create is retried once without it (a rejected request is not billed). The old lowercase "Architectural concept massing model of …" wrapper was removed. **The effect on real output is unverified**; the constants are meant to be tuned from real runs. Separately, `texture: false, pbr: false` are still sent (cost choice), so results are untextured geometry; enabling texture is an owner cost decision.
+
+## ADR-021 — Legacy PyTorch prototype moved to `legacy/`
+
+**Status:** accepted, 2026-10-31 (owner decision: "do not delete them, just move them to a legacy folder")
+
+`binvox_rw.py`, `main.py`, `model.py`, `params.py`, `tester.py`, `trainer.py`, `utils.py`, `pytorch_gan.ipynb` and `results/` moved with `git mv` into `legacy/` (history preserved, nothing deleted or edited; the modules import each other by bare name, so they still work when run from `legacy/`). They remain historical reference only and are not wired into the product (AGENTS.md). Product texture decision recorded the same day: form matters more than texture, so Tripo keeps `texture:false, pbr:false`.
