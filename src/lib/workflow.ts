@@ -294,24 +294,6 @@ export function commitVariations(state: RunInput, newId: (prefix: string) => str
 
 export type LineageEntry = { artifactId: string; createdAt: string; origin: string; instruction: string; current: boolean };
 
-/** Root-to-leaf chain of artifacts ending at `artifactId`, following revisions back to the original generation. */
-export function lineageOf(revisions: Record<string, DesignRevision>, artifacts: Record<string, Artifact>, artifactId: string | undefined): LineageEntry[] {
-  const chain: LineageEntry[] = [];
-  const seen = new Set<string>();
-  let current = artifactId;
-  let instruction = "";
-  while (current && artifacts[current] && !seen.has(current)) {
-    seen.add(current);
-    const artifact = artifacts[current];
-    chain.unshift({ artifactId: current, createdAt: artifact.createdAt, origin: String(artifact.metadata.origin ?? "generation"), instruction, current: current === artifactId });
-    const revision = Object.values(revisions).find((item) => item.childArtifactId === current);
-    instruction = revision?.instruction ?? "";
-    current = revision?.parentArtifactId;
-  }
-  // instruction describes the step that *produced* each entry, so shift it down by one position.
-  return chain.map((entry, index) => ({ ...entry, instruction: index === 0 ? "Original generation" : Object.values(revisions).find((item) => item.childArtifactId === entry.artifactId)?.instruction ?? "" }));
-}
-
 /** Every artifact a node has produced, oldest first, with the instruction of the revision that created it. */
 export function versionsOf(state: Pick<RunInput, "artifacts" | "revisions">, nodeId: string, currentId?: string): LineageEntry[] {
   return Object.values(state.artifacts)

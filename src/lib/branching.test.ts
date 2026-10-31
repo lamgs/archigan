@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { siftProjectV2Schema } from "./contracts";
 import { createWorkflowProject, workflowGraph } from "./projects";
-import { branchFrom, commitVariations, editNodeGeometry, evaluateGraph, lineageOf, restoreVersion, runGeneration, versionsOf, type RunInput } from "./workflow";
+import { branchFrom, commitVariations, editNodeGeometry, evaluateGraph, restoreVersion, runGeneration, versionsOf, type RunInput } from "./workflow";
 
 const NOW = "2026-10-09T10:00:00.000Z";
 let n = 0;
@@ -59,7 +59,6 @@ describe("two branches with lineage", () => {
     expect(revs).toHaveLength(2);
     revs.forEach((r) => expect(r.parentArtifactId).toBe("a1"));
     expect(revs.map((r) => r.change).sort()).toEqual(["parameters", "prompt"]);
-    expect(lineageOf(state.revisions, state.artifacts, branchArtifacts[1]).map((e) => e.artifactId)).toEqual(["a1", branchArtifacts[1]]);
   });
   it("is idempotent and skips pass-through variations", () => {
     const state = build();
