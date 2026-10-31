@@ -16,7 +16,7 @@ Sift 2.0 is a focused architectural prompt-to-3D workflow. It is not a general m
 
 - In scope: project CRUD, text prompts, validated parametric architecture, non-destructive branching, typed React Flow artifacts, expanded 3D viewing, material/camera/render controls, optional hosted 3D generation, PNG/GLB export, complete local restore, sample projects, and polished architectural UI.
 - Out of scope: video, model training, collecting new training data, social/community features, and exposing provider secrets to the browser.
-- The legacy PyTorch 3D-GAN files at the repository root are historical reference only. Do not wire them into the product or require proprietary training data.
+- The legacy PyTorch 3D-GAN files in `legacy/` are historical reference only. Do not wire them into the product or require proprietary training data.
 
 ## Engineering rules
 

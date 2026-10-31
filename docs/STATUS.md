@@ -73,7 +73,7 @@ Record anything that stops or limits work here (with the date and what would unb
 - Procedural output is conceptual massing, not BIM, code-compliant, structural, or fabrication geometry.
 - E2E runs only in Chromium on software rendering (SwiftShader); no Firefox/WebKit/mobile or real-GPU coverage; no CI workflow is committed (it would need workflow-scope push permission).
 - The Vercel deployment is access-protected and has not been smoke-tested behind protection from this session.
-- The legacy Python/PyTorch prototype (`*.py`, `pytorch_gan.ipynb`, `results/`) remains at the repo root pending an owner decision (AGENTS.md forbids silent deletion).
+- The legacy Python/PyTorch prototype (`*.py`, `pytorch_gan.ipynb`, `results/`) now lives in `legacy/` (moved 2026-10-31 by owner decision; nothing deleted).
 
 ## Verification
 

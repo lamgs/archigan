@@ -2,6 +2,11 @@
 
 Append newest entries first. Keep facts in `STATUS.md`; use this log for what changed and what the next agent should do.
 
+## 2026-10-31 — Claude — legacy files moved to `legacy/`
+
+- Moved the legacy PyTorch prototype (`*.py`, notebook, `results/`) into `legacy/` with `git mv` (ADR-021); updated README, AGENTS.md and STATUS paths. Nothing deleted or edited. Owner: form over texture, so Tripo stays untextured.
+- Checks: tsc, eslint, unit tests unaffected (no TS/product file references these paths).
+
 ## 2026-10-31 — Claude — dead-code cleanup
 
 - Removed `lineageOf` (dead in production; only a test used it) and its assertion; added `@eslint/js` as an explicit devDependency (eslint config imports it); regenerated `docs/evidence/` from the current UI (`E2E_EVIDENCE=1`) and deleted the two stale Meshy-era screenshots (`09-hosted-model.png`, `09-paid-confirmation.png`; replaced by `*-tripo` versions).
