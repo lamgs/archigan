@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { composeArchitecturalPrompt } from "../massing";
+import { composeArchitecturalPrompt, negativePromptFor } from "./architectural-style";
 import { clampProgress, hostedConfig, mapHttpError, timedFetch } from "./http";
 import { MAX_GLB_BYTES, ProviderError, type Fetch, type HostedProvider, type JobStatus, type NormalizedTask } from "./types";
 
@@ -139,8 +139,17 @@ export const tripoProvider: HostedProvider = {
   maxGlbBytes: MAX_GLB_BYTES,
   config: (env) => hostedConfig(env, "TRIPO_ENABLED", ["TRIPO_API_KEY"]),
   async create(prompt, refinement, fetchImpl = fetch) {
-    const body = { model: TRIPO_MODEL, prompt: truncatePrompt(composeArchitecturalPrompt(prompt, refinement)), texture: false, pbr: false };
-    const result = await call(TRIPO_CREATE_PATH, { method: "POST", body: JSON.stringify(body) }, fetchImpl, process.env);
+    const brief = composeArchitecturalPrompt(prompt, refinement, MAX_PROMPT_CHARS);
+    const base = { model: TRIPO_MODEL, prompt: truncatePrompt(brief), texture: false, pbr: false };
+    const steered = { ...base, negative_prompt: negativePromptFor(`${prompt} ${refinement}`) };
+    let result;
+    try {
+      result = await call(TRIPO_CREATE_PATH, { method: "POST", body: JSON.stringify(steered) }, fetchImpl, process.env);
+    } catch (error) {
+      // `negative_prompt` is documented only in secondary sources (UNVERIFIED). A rejected request is not billed, so retry once without it.
+      if (!(error instanceof ProviderError) || error.code !== "rejected") throw error;
+      result = await call(TRIPO_CREATE_PATH, { method: "POST", body: JSON.stringify(base) }, fetchImpl, process.env);
+    }
     const id = result.data?.task_id;
     if (typeof id !== "string" || !TASK_ID.test(id)) throw new ProviderError("bad-response", "Tripo did not return a usable task ID.", 502, false);
     return id;
